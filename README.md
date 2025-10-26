@@ -28,14 +28,29 @@ The **Infinite Concept Expansion Engine** is the world's first truly autonomous 
 ## 🏗️ Enhanced Architecture Overview
 
 ```
-   🎯 User Input Layer → 🧠 Concept Orchestrator → 🤖 Multi-Agent Expansion System
-         ↑                                             ↓
-   📊 Real-time Monitor ← → 🎨 Content Generation → 💾 Knowledge Graph Database
-         ↑                                             ↓  
-   📈 Evolution Insights ← → 🔍 Data Ingestion → 🧬 Self-Improving Feedback
-         ↑                                             ↓
-   📱 Visual Dashboard ← → 🌐 Output Renderer → 🧠 Persistent Learning System
+   🎯 REST API (FastAPI)
+         ↓
+   🧠 Concept Orchestrator → 🤖 Multi-Agent System (LLM-Powered)
+         ↓                          ↓
+   💾 SQLAlchemy Database    🔍 Semantic Search (Embeddings)
+         ↓                          ↓
+   📊 Knowledge Graph Engine ← 🧬 Self-Improving Feedback
+         ↓                          ↓
+   🎨 Content Generation ← → 🧠 Persistent Learning
+         ↓
+   🌐 Visualization & Dashboard
 ```
+
+### New Features in v1.1
+
+- **🔌 REST API**: Full FastAPI-based REST endpoints for programmatic access
+- **🧠 Dual LLM Support**: Seamless integration with OpenAI (GPT-4) and Anthropic (Claude)
+- **🔍 Semantic Search**: Sentence Transformer embeddings for intelligent concept discovery
+- **💾 Database Persistence**: SQLAlchemy models with SQLite + migration to production DBs
+- **⚙️ Config Management**: Environment-based settings with .env support
+- **🛡️ Resilience**: Circuit breakers and retry logic with exponential backoff
+- **📝 Structured Logging**: Production-grade logging with rotation
+- **🔐 Error Handling**: Custom exception hierarchy and validation
 
 ### Core Enhanced Components
 
@@ -53,12 +68,33 @@ The **Infinite Concept Expansion Engine** is the world's first truly autonomous 
 
 ```
 project/
+├── api/                           # REST API (FastAPI)
+│   ├── app.py                    # FastAPI application factory
+│   ├── routes.py                 # API endpoints
+│   └── models.py                 # Pydantic request/response models
+├── config/                        # Configuration management
+│   ├── settings.py               # Pydantic settings from environment
+│   └── logging_config.py         # Logging setup
+├── database/                      # Database models and management
+│   ├── models.py                 # SQLAlchemy ORM models
+│   └── database.py               # Database connection management
+├── llm_service/                   # LLM integration
+│   ├── base.py                   # LLMService abstract interface
+│   ├── openai_service.py         # OpenAI (GPT-4) implementation
+│   ├── anthropic_service.py      # Anthropic (Claude) implementation
+│   └── factory.py                # LLM provider factory
+├── embeddings/                    # Semantic embeddings
+│   └── service.py                # Sentence Transformer embeddings
+├── resilience/                    # Error handling & fault tolerance
+│   ├── retry.py                  # Retry logic with exponential backoff
+│   ├── circuit_breaker.py        # Circuit breaker pattern
+│   └── exceptions.py             # Custom exception hierarchy
 ├── core/                          # Core orchestrator and system logic
-│   └── concept_orchestrator.py    # Central coordination hub
+│   └── concept_orchestrator.py   # Central coordination hub
 ├── agents/                        # Multi-agent expansion system
 │   └── base.py                   # Agent interfaces and implementations
 ├── knowledge_graph/              # Enhanced knowledge graph engine
-│   └── engine.py                 # Graph storage and querying
+│   └── engine.py                 # Graph storage and semantic querying
 ├── data_pipeline/                # Data ingestion and processing
 │   └── ingestion.py              # Internet query and data acquisition
 ├── content_generation/           # Multimodal content creation
@@ -71,11 +107,10 @@ project/
 │   └── visualization.py          # Advanced visualization and learning system
 ├── tests/                        # Comprehensive test suite
 ├── main.py                       # Enhanced application entry point
-├── example_ui.py                 # UI demonstration
+├── .env.example                  # Example environment configuration
+├── .gitignore                    # Git ignore rules
+├── requirements.txt              # Python dependencies
 ├── learning_history.json         # Persistent learning storage
-├── knowledge_graph_*.html        # Auto-generated visualizations
-├── dashboard_*.html              # Interactive dashboards
-├── timeline_*.html               # Evolution timelines
 ├── pyproject.toml                # Project configuration
 └── README.md                     # This file
 ```
@@ -121,12 +156,23 @@ project/
 
 ## 🏃‍♂️ Running the Enhanced Application
 
-```bash
-# Install dependencies
-pip install --break-system-packages PyPDF2 aiohttp matplotlib networkx plotly kaleido
+### Quick Start
 
-# Run the enhanced application
-python3 main.py
+```bash
+# 1. Install dependencies
+pip install -r requirements.txt
+
+# 2. Configure environment
+cp .env.example .env
+# Edit .env with your API keys
+export OPENAI_API_KEY=your-key-here
+export LLM_PROVIDER=openai
+
+# 3. Run the API server
+python -m api.app
+
+# API will be available at http://localhost:8000
+# Docs at http://localhost:8000/docs
 ```
 
 ### 🌟 What to Expect:
@@ -135,6 +181,60 @@ python3 main.py
 3. 🧠 **Persistent Learning**: The system learns and improves across sessions
 4. 🔄 **Continuous Mode**: Optional continuous learning that runs indefinitely
 5. 📈 **Real-time Metrics**: Live evolution insights and system health monitoring
+
+### Configuration
+
+Create a `.env` file based on `.env.example`:
+
+```bash
+# LLM Configuration
+LLM_PROVIDER=openai              # or "anthropic"
+OPENAI_API_KEY=sk-...           # For OpenAI
+ANTHROPIC_API_KEY=sk-ant-...    # For Anthropic
+
+# API Configuration
+API_HOST=0.0.0.0
+API_PORT=8000
+
+# Database
+DATABASE_URL=sqlite:///./continuum.db
+
+# Embeddings
+EMBEDDING_MODEL=all-MiniLM-L6-v2
+
+# Logging
+LOG_LEVEL=INFO
+```
+
+### REST API Usage
+
+**Submit a concept for expansion:**
+```bash
+curl -X POST "http://localhost:8000/api/concepts/expand" \
+  -H "Content-Type: application/json" \
+  -d '{"concept": "artificial intelligence", "context": "in education"}'
+```
+
+**Search the knowledge graph:**
+```bash
+curl -X POST "http://localhost:8000/api/search" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "machine learning", "limit": 10}'
+```
+
+**Get knowledge graph:**
+```bash
+curl "http://localhost:8000/api/graph?limit=100"
+```
+
+**Submit feedback:**
+```bash
+curl -X POST "http://localhost:8000/api/feedback" \
+  -H "Content-Type: application/json" \
+  -d '{"exploration_id": "exp-123", "feedback_type": "quality", "rating": 0.85}'
+```
+
+Full API documentation at `http://localhost:8000/docs`
 
 ## 🧪 Testing
 
