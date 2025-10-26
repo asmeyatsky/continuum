@@ -37,14 +37,30 @@ def setup_logging(
         Configured logger instance
     """
     logger = logging.getLogger(name)
-    logger.setLevel(getattr(logging, level.value))
+    
+    # Handle both enum and string levels
+    if isinstance(level, LogLevel):
+        level_value = getattr(logging, level.value)
+    else:
+        # If it's a string, use it directly
+        level_value = getattr(logging, level.upper())
+    
+    logger.setLevel(level_value)
 
     # Remove existing handlers
     logger.handlers.clear()
 
     # Console handler
     console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(getattr(logging, level.value))
+    
+    # Handle both enum and string levels for console handler
+    if isinstance(level, LogLevel):
+        console_level = getattr(logging, level.value)
+    else:
+        # If it's a string, use it directly
+        console_level = getattr(logging, level.upper())
+    
+    console_handler.setLevel(console_level)
 
     # Formatter
     formatter = logging.Formatter(
@@ -62,7 +78,15 @@ def setup_logging(
             maxBytes=10_485_760,  # 10MB
             backupCount=5
         )
-        file_handler.setLevel(getattr(logging, level.value))
+        
+        # Handle both enum and string levels for file handler
+        if isinstance(level, LogLevel):
+            file_level = getattr(logging, level.value)
+        else:
+            # If it's a string, use it directly
+            file_level = getattr(logging, level.upper())
+        
+        file_handler.setLevel(file_level)
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
 

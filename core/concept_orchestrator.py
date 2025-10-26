@@ -22,6 +22,22 @@ class ExplorationState(Enum):
 
 
 @dataclass
+class Exploration:
+    """Represents an exploration with concept and status"""
+    id: str
+    concept: str
+    status: ExplorationState
+    created_at: datetime = None
+    tasks: List['ExplorationTask'] = None  # List of tasks within this exploration
+    
+    def __post_init__(self):
+        if self.created_at is None:
+            self.created_at = datetime.now()
+        if self.tasks is None:
+            self.tasks = []
+
+
+@dataclass
 class ConceptNode:
     """Represents a concept node in the knowledge graph"""
     id: str
@@ -83,10 +99,15 @@ class ConceptOrchestrator(ABC):
 class DefaultConceptOrchestrator(ConceptOrchestrator):
     """Default implementation of the concept orchestrator"""
     
-    def __init__(self):
+    def __init__(self, knowledge_graph=None):
         self.explorations: Dict[str, List[ExplorationTask]] = {}
         self.nodes: Dict[str, ConceptNode] = {}
         self.task_queue: List[ExplorationTask] = []
+        # Add knowledge_graph attribute as expected by the API
+        from knowledge_graph.engine import InMemoryKnowledgeGraphEngine
+        self.knowledge_graph = knowledge_graph or InMemoryKnowledgeGraphEngine()
+        # Add orchestrator attribute for compatibility
+        self.orchestrator = self
     
     def submit_exploration_request(self, initial_concept: str) -> str:
         """Submit a new exploration request and return exploration ID"""
@@ -100,25 +121,51 @@ class DefaultConceptOrchestrator(ConceptOrchestrator):
             status=ExplorationState.PENDING
         )
         
-        self.explorations[exploration_id] = [initial_task]
+        # Create an exploration object with the initial concept
+        exploration = Exploration(
+            id=exploration_id,
+            concept=initial_concept,
+            status=ExplorationState.IN_PROGRESS,
+            tasks=[initial_task]
+        )
+        
+        self.explorations[exploration_id] = exploration
         self.task_queue.append(initial_task)
         
         return exploration_id
+    
+    def submit_concept(self, initial_concept: str) -> str:
+        """Submit a concept for expansion - API compatibility method"""
+        return self.submit_exploration_request(initial_concept)
     
     def get_exploration_status(self, exploration_id: str) -> ExplorationState:
         """Get the current status of an exploration"""
         if exploration_id not in self.explorations:
             raise ValueError(f"Exploration {exploration_id} not found")
         
-        tasks = self.explorations[exploration_id]
+        exploration = self.explorations[exploration_id]
+        # Update status based on tasks
+        tasks = exploration.tasks
         if all(task.status == ExplorationState.COMPLETED for task in tasks):
-            return ExplorationState.COMPLETED
+            exploration.status = ExplorationState.COMPLETED
         elif any(task.status == ExplorationState.FAILED for task in tasks):
-            return ExplorationState.FAILED
+            exploration.status = ExplorationState.FAILED
         elif any(task.status == ExplorationState.PAUSED for task in tasks):
-            return ExplorationState.PAUSED
+            exploration.status = ExplorationState.PAUSED
         else:
-            return ExplorationState.IN_PROGRESS
+            exploration.status = ExplorationState.IN_PROGRESS
+        
+        return exploration.status
+    
+    def __init__(self, knowledge_graph=None):
+        self.explorations: Dict[str, Exploration] = {}
+        self.nodes: Dict[str, ConceptNode] = {}
+        self.task_queue: List[ExplorationTask] = []
+        # Add knowledge_graph attribute as expected by the API
+        from knowledge_graph.engine import InMemoryKnowledgeGraphEngine
+        self.knowledge_graph = knowledge_graph or InMemoryKnowledgeGraphEngine()
+        # Add orchestrator attribute for compatibility
+        self.orchestrator = self
     
     def pause_exploration(self, exploration_id: str) -> bool:
         """Pause an ongoing exploration"""

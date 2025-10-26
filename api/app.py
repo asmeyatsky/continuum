@@ -53,7 +53,48 @@ def create_app(engine=None) -> FastAPI:
 
     @app.on_event("startup")
     async def startup_event():
+        """Initialize the engine when the application starts."""
+        import logging
+        from core.concept_orchestrator import DefaultConceptOrchestrator
+        from knowledge_graph.engine import InMemoryKnowledgeGraphEngine
+        from feedback_system.core import SelfImprovingFeedbackSystem
+        from content_generation.multimodal import MockMultimodalContentGenerator
+        from data_pipeline.ingestion import MockDataIngestionPipeline
+        from llm_service.factory import get_llm_service
+        
+        logger = logging.getLogger(__name__)
         logger.info(f"Starting {settings.APP_NAME} v{settings.APP_VERSION}")
+        
+        if not engine:  # Only initialize if not provided
+            try:
+                # Initialize the core components
+                llm_service = get_llm_service()
+                logger.info("LLM service initialized")
+                
+                ingestion_pipeline = MockDataIngestionPipeline()
+                logger.info("Data ingestion pipeline initialized")
+                
+                knowledge_graph = InMemoryKnowledgeGraphEngine()
+                logger.info("Knowledge graph engine initialized")
+                
+                feedback_system = SelfImprovingFeedbackSystem()
+                logger.info("Feedback system initialized")
+                
+                content_generator = MockMultimodalContentGenerator()
+                logger.info("Content generator initialized")
+                
+                orchestrator = DefaultConceptOrchestrator()  # Using the concrete implementation
+                logger.info("Concept orchestrator initialized")
+                
+                # Set the engine for the routes
+                set_engine(orchestrator)
+                logger.info("Engine set for API routes")
+                
+            except Exception as e:
+                logger.error(f"Error initializing engine: {e}")
+                import traceback
+                traceback.print_exc()
+                raise
 
     @app.on_event("shutdown")
     async def shutdown_event():
@@ -75,6 +116,7 @@ def create_app(engine=None) -> FastAPI:
 if __name__ == "__main__":
     import uvicorn
 
+    # Create the app without engine (it will be set during startup)
     app = create_app()
     uvicorn.run(
         app,
