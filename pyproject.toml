@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "infinite-concept-expansion-engine"
+version = "0.1.0"
+description = "An autonomous AI-powered application designed to continuously explore, expand, and map the boundaries of digital knowledge"
+authors = ["Allan Smeyatsky <allansmeyatsky@example.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+aiohttp = "^3.8.0"
+PyPDF2 = "^3.0.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0.0"
+pytest-cov = "^4.0"
+mypy = "^1.0"
+black = "^23.0"
+flake8 = "^6.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

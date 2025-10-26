@@ -1,0 +1,10 @@
+# Production dependencies
+aiohttp>=3.8.0
+PyPDF2>=3.0.0
+matplotlib>=3.5.0
+networkx>=2.6.0
+plotly>=5.0.0
+kaleido>=0.2.0
+
+# Development dependencies
+pytest>=8.0.0
