@@ -4,12 +4,17 @@ Knowledge Graph Engine for the Infinite Concept Expansion Engine.
 This component implements a dynamic, self-organizing knowledge representation
 with autonomous schema induction, real-time node/edge creation, and similarity-based retrieval.
 """
+import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 from core.concept_orchestrator import ConceptNode
+from embeddings.service import EmbeddingService
 import uuid
 from datetime import datetime
+import numpy as np
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -73,20 +78,46 @@ class KnowledgeGraphEngine(ABC):
 
 class InMemoryKnowledgeGraphEngine(KnowledgeGraphEngine):
     """In-memory implementation of the knowledge graph engine for development"""
-    
-    def __init__(self):
+
+    def __init__(self, embedding_service: Optional[EmbeddingService] = None):
         self.nodes: Dict[str, ConceptNode] = {}
         self.edges: Dict[str, GraphEdge] = {}
-        self.embeddings: Dict[str, List[float]] = {}  # Simple embedding storage
+        self.embeddings: Dict[str, np.ndarray] = {}  # Sentence Transformer embeddings
+
+        # Initialize embedding service
+        try:
+            self.embedding_service = embedding_service or EmbeddingService()
+            logger.info("Using Sentence Transformer embeddings for semantic search")
+        except Exception as e:
+            logger.warning(f"Could not load embedding service: {e}. Using fallback.")
+            self.embedding_service = None
     
     def add_node(self, node: ConceptNode) -> bool:
         """Add a node to the knowledge graph"""
         if node.id in self.nodes:
             return False
-        
+
         self.nodes[node.id] = node
-        # Generate a simple embedding based on the content
-        self.embeddings[node.id] = self._generate_embedding(node.content)
+
+        # Generate embedding for semantic search
+        try:
+            if self.embedding_service:
+                # Use Sentence Transformer embeddings
+                text_to_embed = f"{node.concept} {node.content}"
+                self.embeddings[node.id] = self.embedding_service.encode(text_to_embed)
+                logger.debug(
+                    f"Generated embedding for node {node.id} ({node.concept})"
+                )
+            else:
+                # Fallback to simple embedding
+                self.embeddings[node.id] = self._generate_fallback_embedding(
+                    node.content
+                )
+        except Exception as e:
+            logger.error(f"Error generating embedding for node {node.id}: {e}")
+            # Continue without embedding
+            pass
+
         return True
     
     def add_edge(self, edge: GraphEdge) -> bool:
@@ -130,33 +161,62 @@ class InMemoryKnowledgeGraphEngine(KnowledgeGraphEngine):
         return neighbors
     
     def find_similar_nodes(self, concept: str, limit: int = 10) -> List[GraphQueryResult]:
-        """Find nodes similar to the given concept using simple cosine similarity"""
+        """Find nodes similar to the given concept using semantic embeddings"""
         if not self.nodes:
             return []
-        
-        # Generate embedding for the query concept
-        query_embedding = self._generate_embedding(concept)
-        
-        # Calculate similarities
-        similarities = []
-        for node_id, node in self.nodes.items():
-            if node_id in self.embeddings:
-                similarity = self._cosine_similarity(query_embedding, self.embeddings[node_id])
-                similarities.append((node_id, similarity))
-        
-        # Sort by similarity
-        similarities.sort(key=lambda x: x[1], reverse=True)
-        
-        # Return top results
-        results = []
-        for node_id, similarity in similarities[:limit]:
-            results.append(GraphQueryResult(
-                nodes=[self.nodes[node_id]],
-                edges=[],  # Edges not included in this simple implementation
-                score=similarity
-            ))
-        
-        return results
+
+        try:
+            similarities = []
+
+            if self.embedding_service and self.embeddings:
+                # Use Sentence Transformer embeddings for semantic search
+                query_embedding = self.embedding_service.encode(concept)
+
+                # Find similar embeddings
+                embedding_list = list(self.embeddings.values())
+                node_ids = list(self.embeddings.keys())
+
+                if embedding_list:
+                    results = self.embedding_service.find_similar(
+                        query_embedding,
+                        np.array(embedding_list),
+                        top_k=limit,
+                        threshold=0.0,
+                    )
+
+                    similarities = [
+                        (node_ids[idx], score) for idx, score in results
+                    ]
+                    logger.debug(
+                        f"Found {len(similarities)} similar nodes using embeddings"
+                    )
+            else:
+                # Fallback to simple text matching
+                query_lower = concept.lower()
+                for node_id, node in self.nodes.items():
+                    if query_lower in node.concept.lower():
+                        similarities.append((node_id, 0.8))
+                    elif query_lower in node.content.lower():
+                        similarities.append((node_id, 0.5))
+
+            # Sort by similarity descending
+            similarities.sort(key=lambda x: x[1], reverse=True)
+
+            # Return top results
+            results = []
+            for node_id, similarity in similarities[:limit]:
+                results.append(
+                    GraphQueryResult(
+                        nodes=[self.nodes[node_id]],
+                        edges=[],  # Edges not included in this implementation
+                        score=float(similarity),
+                    )
+                )
+
+            return results
+        except Exception as e:
+            logger.error(f"Error finding similar nodes: {e}")
+            return []
     
     def search_nodes(self, query: str, limit: int = 10) -> List[GraphQueryResult]:
         """Search nodes by content"""
@@ -211,46 +271,39 @@ class InMemoryKnowledgeGraphEngine(KnowledgeGraphEngine):
         
         return subgraph_nodes, subgraph_edges
     
-    def _generate_embedding(self, text: str) -> List[float]:
-        """Generate a simple embedding for the text (in a real implementation, use proper embeddings)"""
-        # Simple hash-based embedding - not suitable for production, just for demonstration
-        import hashlib
-        import struct
-        
-        # Create a hash of the text
-        hash_input = text.lower().encode('utf-8')
-        hash_obj = hashlib.sha256(hash_input)
-        hash_hex = hash_obj.hexdigest()
-        
-        # Convert hash to a list of floats
-        embedding = []
-        for i in range(0, len(hash_hex), 8):  # Take 8 chars at a time
-            hex_chunk = hash_hex[i:i+8]
-            if len(hex_chunk) == 8:
-                # Convert hex to integer, then to float in range [0, 1]
-                int_val = int(hex_chunk, 16)
-                float_val = (int_val % 10000) / 10000.0
-                embedding.append(float_val)
-        
-        # Keep embedding to 16 dimensions
-        return (embedding * (16 // len(embedding) + 1))[:16]
-    
-    def _cosine_similarity(self, vec1: List[float], vec2: List[float]) -> float:
-        """Calculate cosine similarity between two vectors"""
-        if len(vec1) != len(vec2):
-            return 0.0
-        
-        # Calculate dot product
-        dot_product = sum(a * b for a, b in zip(vec1, vec2))
-        
-        # Calculate magnitudes
-        magnitude1 = sum(a * a for a in vec1) ** 0.5
-        magnitude2 = sum(a * a for a in vec2) ** 0.5
-        
-        if magnitude1 == 0 or magnitude2 == 0:
-            return 0.0
-        
-        return dot_product / (magnitude1 * magnitude2)
+    def _generate_fallback_embedding(self, text: str) -> np.ndarray:
+        """
+        Generate a fallback embedding for the text.
+
+        Used when Sentence Transformers is not available.
+        This is a basic word-frequency based embedding and should not be used in production.
+        """
+        # Simple TF-IDF-like fallback using character frequency
+        text_lower = text.lower() if text else ""
+
+        # Create a 384-dimensional embedding (matching Sentence Transformer output)
+        embedding = np.zeros(384, dtype=np.float32)
+
+        # Simple character frequency encoding
+        char_freq = {}
+        for char in text_lower:
+            if char.isalnum():
+                char_freq[char] = char_freq.get(char, 0) + 1
+
+        # Map character frequencies to embedding dimensions
+        if char_freq:
+            max_freq = max(char_freq.values())
+            chars = sorted(char_freq.keys())
+            for i, char in enumerate(chars):
+                if i < len(embedding):
+                    embedding[i] = char_freq[char] / max_freq
+
+        # Add text length encoding
+        text_length = len(text_lower)
+        for i in range(len(embedding) // 4, min(len(embedding) // 4 + 10, len(embedding))):
+            embedding[i] = min(text_length / 1000, 1.0)
+
+        return embedding.astype(np.float32)
     
     def get_node_count(self) -> int:
         """Get the total number of nodes in the graph"""
