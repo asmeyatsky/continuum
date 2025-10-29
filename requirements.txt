@@ -40,3 +40,8 @@ mypy>=1.7.0
 
 # Logging & Monitoring
 python-json-logger>=2.0.0
+
+# Caching & Performance
+redis>=5.0.0
+aioredis>=2.0.0
+cachetools>=5.0.0

@@ -2,16 +2,19 @@
 Research Agent Adapter - Switches between mock and real implementations.
 
 Uses feature flags to enable/disable real web search integration.
+Supports distributed caching via Redis for multi-instance deployments.
 """
 
 import logging
 import asyncio
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from agents.base import BaseAgent, AgentResponse
 from core.concept_orchestrator import ExplorationTask, ExplorationState
 from core.feature_flags import Feature, is_feature_enabled
 from agents.research_real import search_web, WebSearchFactory
+from config.settings import settings
+from cache import get_cache
 
 logger = logging.getLogger(__name__)
 
@@ -119,27 +122,29 @@ class SmartResearchAgent(HybridResearchAgent):
 
     Features:
     - Retries with different providers if one fails
-    - Caches results to avoid repeated API calls
+    - Distributed caching via Redis or local memory
     - Logs usage metrics
+    - Multi-instance cache sharing (with Redis)
     """
 
     def __init__(self):
         super().__init__()
-        self._search_cache: Dict[str, Dict[str, Any]] = {}
+        self._local_cache: Dict[str, Dict[str, Any]] = {}
         self._search_count = 0
+        self._cache = get_cache()
 
     def process_task(self, task: ExplorationTask) -> AgentResponse:
-        """Process research tasks with caching and fallback."""
-        # Check cache first
-        if task.concept in self._search_cache:
+        """Process research tasks with distributed caching and fallback."""
+        # Check distributed cache first
+        cache_result = asyncio.run(self._get_cached_result(task.concept))
+        if cache_result is not None:
             logger.debug(f"Using cached search results for '{task.concept}'")
-            cached_result = self._search_cache[task.concept]
             return AgentResponse(
                 success=True,
-                data=cached_result,
+                data=cache_result,
                 metadata={
                     "task_id": task.id,
-                    "source_count": len(cached_result.get("sources", [])),
+                    "source_count": len(cache_result.get("sources", [])),
                     "from_cache": True,
                 },
                 agent_name=self.get_agent_name(),
@@ -149,22 +154,55 @@ class SmartResearchAgent(HybridResearchAgent):
         # Process normally
         response = super().process_task(task)
 
-        # Cache successful results
+        # Cache successful results in distributed cache
         if response.success and isinstance(response.data, dict):
-            self._search_cache[task.concept] = response.data
+            asyncio.run(
+                self._cache_result(task.concept, response.data)
+            )
+            self._local_cache[task.concept] = response.data
             self._search_count += 1
 
         return response
 
+    async def _get_cached_result(self, concept: str) -> Optional[Dict[str, Any]]:
+        """Get cached result from distributed cache."""
+        try:
+            cache_key = f"research:web:{concept}"
+            cached = await self._cache.get(cache_key)
+            if cached is not None:
+                logger.debug(f"Distributed cache hit for '{concept}'")
+            return cached
+        except Exception as e:
+            logger.error(f"Error retrieving from distributed cache: {e}")
+            # Fall back to local cache
+            return self._local_cache.get(concept)
+
+    async def _cache_result(
+        self, concept: str, result: Dict[str, Any]
+    ) -> None:
+        """Cache result in distributed cache."""
+        try:
+            cache_key = f"research:web:{concept}"
+            # Cache for 24 hours by default
+            await self._cache.set(
+                cache_key, result, settings.CACHE_TTL_SECONDS
+            )
+            logger.debug(f"Cached search result for '{concept}'")
+        except Exception as e:
+            logger.error(f"Error caching result: {e}")
+
     def get_cache_stats(self) -> Dict[str, Any]:
         """Get search cache statistics."""
         return {
-            "cached_concepts": len(self._search_cache),
+            "local_cached_concepts": len(self._local_cache),
             "total_searches": self._search_count,
-            "cache_hit_rate": len(self._search_cache) / max(self._search_count, 1),
+            "cache_hit_rate": len(self._local_cache)
+            / max(self._search_count, 1),
+            "cache_type": self._cache.__class__.__name__,
         }
 
-    def clear_cache(self):
-        """Clear search cache."""
-        self._search_cache.clear()
-        logger.info("Search cache cleared")
+    async def clear_cache(self):
+        """Clear both local and distributed caches."""
+        self._local_cache.clear()
+        await self._cache.clear()
+        logger.info("Search cache cleared (local and distributed)")

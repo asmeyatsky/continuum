@@ -61,7 +61,9 @@ class Settings(BaseSettings):
 
     # Performance & Caching
     ENABLE_CACHING: bool = True
+    CACHE_TYPE: str = "local"  # "local", "redis", or "none"
     CACHE_TTL_SECONDS: int = 3600
+    CACHE_MAX_SIZE: int = 1000  # For local cache
     ASYNC_BATCH_SIZE: int = 10
     REDIS_URL: Optional[str] = None  # redis://localhost:6379/0
 

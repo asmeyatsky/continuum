@@ -2,11 +2,13 @@
 Embedding service for semantic search and similarity computation.
 
 Uses Sentence Transformers for high-quality embeddings.
+Supports caching via the cache system for performance optimization.
 """
 import logging
 from typing import List, Optional
 import numpy as np
 from config.settings import settings
+from cache import cache_sync
 
 try:
     from sklearn.metrics.pairwise import cosine_similarity
@@ -79,6 +81,59 @@ class EmbeddingService:
         Returns:
             Embedding vector as numpy array
         """
+        if settings.ENABLE_CACHING:
+            return self._encode_with_cache(text)
+        else:
+            return self._encode_uncached(text)
+
+    def _encode_with_cache(self, text: str) -> np.ndarray:
+        """Encode with caching enabled."""
+        import asyncio
+        from cache import get_cache
+
+        cache = get_cache()
+        cache_key = f"embedding:{self.model_name}:{text[:100]}"
+
+        # Try to get from cache (convert to list for JSON serialization)
+        try:
+            loop = asyncio.get_event_loop()
+            cached_list = loop.run_until_complete(cache.get(cache_key))
+            if cached_list is not None:
+                logger.debug(f"Embedding cache hit: {text[:50]}...")
+                return np.array(cached_list, dtype=np.float32)
+        except RuntimeError:
+            cached_list = asyncio.run(cache.get(cache_key))
+            if cached_list is not None:
+                logger.debug(f"Embedding cache hit: {text[:50]}...")
+                return np.array(cached_list, dtype=np.float32)
+
+        # Compute embedding
+        embedding = self._encode_uncached(text)
+
+        # Store in cache as list (JSON serializable)
+        try:
+            loop = asyncio.get_event_loop()
+            if not loop.is_running():
+                loop.run_until_complete(
+                    cache.set(
+                        cache_key,
+                        embedding.tolist(),
+                        settings.CACHE_TTL_SECONDS,
+                    )
+                )
+        except RuntimeError:
+            asyncio.run(
+                cache.set(
+                    cache_key,
+                    embedding.tolist(),
+                    settings.CACHE_TTL_SECONDS,
+                )
+            )
+
+        return embedding
+
+    def _encode_uncached(self, text: str) -> np.ndarray:
+        """Encode without caching."""
         try:
             if self.use_sentence_transformers and self.model:
                 embedding = self.model.encode(text, convert_to_numpy=True)
