@@ -73,6 +73,13 @@ class Settings(BaseSettings):
     FEATURE_PERSISTENT_LEARNING: bool = True  # Enable persistent learning system
     FEATURE_DISTRIBUTED_TRACING: bool = False  # Enable OpenTelemetry tracing
 
+    # Distributed Tracing Configuration
+    TRACING_ENABLED: bool = False  # Enable/disable tracing
+    TRACING_EXPORTER: str = "console"  # console, jaeger, otlp, in_memory, none
+    TRACING_JAEGER_HOST: str = "localhost"
+    TRACING_JAEGER_PORT: int = 6831
+    TRACING_OTLP_ENDPOINT: str = "http://localhost:4317"
+
     # Web Search Integration
     BRAVE_SEARCH_API_KEY: Optional[str] = None
     GOOGLE_SEARCH_API_KEY: Optional[str] = None
