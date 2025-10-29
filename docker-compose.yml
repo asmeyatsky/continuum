@@ -1,0 +1,155 @@
+version: '3.9'
+
+services:
+  # Continuum Application
+  continuum:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: continuum-app
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_NAME=Continuum
+      - DEBUG=false
+      - LOG_LEVEL=INFO
+
+      # Database
+      - DATABASE_URL=postgresql://continuum_user:continuum_password@postgres:5432/continuum
+      - USE_PERSISTENT_GRAPH=true
+
+      # Caching
+      - CACHE_TYPE=redis
+      - CACHE_TTL_SECONDS=3600
+      - REDIS_URL=redis://redis:6379/0
+
+      # Tracing
+      - TRACING_ENABLED=true
+      - TRACING_EXPORTER=jaeger
+      - TRACING_JAEGER_HOST=jaeger
+      - TRACING_JAEGER_PORT=6831
+
+      # Feature Flags
+      - FEATURE_REAL_WEB_SEARCH=false
+      - FEATURE_REAL_IMAGE_GENERATION=false
+      - FEATURE_PERSISTENT_LEARNING=true
+      - FEATURE_DISTRIBUTED_TRACING=true
+
+      # API Keys (set via environment or secrets)
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - BRAVE_SEARCH_API_KEY=${BRAVE_SEARCH_API_KEY:-}
+      - GOOGLE_SEARCH_API_KEY=${GOOGLE_SEARCH_API_KEY:-}
+      - TAVILY_API_KEY=${TAVILY_API_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      jaeger:
+        condition: service_started
+    networks:
+      - continuum-network
+    restart: unless-stopped
+    volumes:
+      - ./logs:/app/logs
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: continuum-postgres
+    environment:
+      - POSTGRES_DB=continuum
+      - POSTGRES_USER=continuum_user
+      - POSTGRES_PASSWORD=continuum_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U continuum_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - continuum-network
+    restart: unless-stopped
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: continuum-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - continuum-network
+    restart: unless-stopped
+
+  # Jaeger Tracing
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: continuum-jaeger
+    environment:
+      - COLLECTOR_ZIPKIN_HOST_PORT=:9411
+      - MEMORY_MAX_TRACES=10000
+    ports:
+      - "6831:6831/udp"  # Jaeger agent
+      - "16686:16686"    # Jaeger UI
+    networks:
+      - continuum-network
+    restart: unless-stopped
+
+  # Prometheus Monitoring
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: continuum-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+    networks:
+      - continuum-network
+    restart: unless-stopped
+
+  # Grafana Dashboards
+  grafana:
+    image: grafana/grafana:latest
+    container_name: continuum-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - prometheus
+    networks:
+      - continuum-network
+    restart: unless-stopped
+
+networks:
+  continuum-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local

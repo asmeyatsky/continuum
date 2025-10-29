@@ -2,11 +2,18 @@
 FastAPI application factory for the Continuum API.
 """
 import logging
-from fastapi import FastAPI
+import time
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from api.routes import router, set_engine
 from config.settings import settings
 from config.logging_config import setup_logging
+from monitoring.metrics import (
+    record_http_request,
+    initialize_metrics,
+    metrics_registry,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +50,41 @@ def create_app(engine=None) -> FastAPI:
         allow_headers=["*"],
     )
 
+    # Add metrics middleware for request/response tracking
+    @app.middleware("http")
+    async def metrics_middleware(request: Request, call_next):
+        """Middleware to collect HTTP request metrics."""
+        start_time = time.time()
+        request_size = int(request.headers.get("content-length", 0))
+
+        try:
+            response = await call_next(request)
+            duration = time.time() - start_time
+            response_size = int(response.headers.get("content-length", 0))
+
+            # Record metrics
+            record_http_request(
+                method=request.method,
+                endpoint=request.url.path,
+                status_code=response.status_code,
+                duration=duration,
+                request_size=request_size,
+                response_size=response_size,
+            )
+
+            return response
+        except Exception as e:
+            duration = time.time() - start_time
+            record_http_request(
+                method=request.method,
+                endpoint=request.url.path,
+                status_code=500,
+                duration=duration,
+                request_size=request_size,
+                response_size=0,
+            )
+            raise
+
     # Include routes
     app.include_router(router)
 
@@ -61,9 +103,16 @@ def create_app(engine=None) -> FastAPI:
         from content_generation.multimodal import MockMultimodalContentGenerator
         from data_pipeline.ingestion import MockDataIngestionPipeline
         from llm_service.factory import get_llm_service
-        
+
         logger = logging.getLogger(__name__)
         logger.info(f"Starting {settings.APP_NAME} v{settings.APP_VERSION}")
+
+        # Initialize Prometheus metrics
+        initialize_metrics(
+            app_name=settings.APP_NAME,
+            version=settings.APP_VERSION,
+        )
+        logger.info("Metrics initialized")
         
         if not engine:  # Only initialize if not provided
             try:
@@ -108,7 +157,22 @@ def create_app(engine=None) -> FastAPI:
             "version": settings.APP_VERSION,
             "docs": "/docs",
             "health": "/api/health",
+            "metrics": "/metrics",
         }
+
+    @app.get("/metrics")
+    async def metrics():
+        """Prometheus metrics endpoint."""
+        try:
+            from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+
+            return Response(
+                content=generate_latest(metrics_registry),
+                media_type=CONTENT_TYPE_LATEST,
+            )
+        except ImportError:
+            logger.warning("prometheus_client not available")
+            return {"error": "Metrics not available"}
 
     return app
 

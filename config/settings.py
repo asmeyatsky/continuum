@@ -88,6 +88,7 @@ class Settings(BaseSettings):
 
     # Image Generation
     OPENAI_IMAGE_API_KEY: Optional[str] = None  # Uses OPENAI_API_KEY by default
+    STABLE_DIFFUSION_ENDPOINT: Optional[str] = None  # e.g., http://localhost:7860
 
     class Config:
         """Pydantic config."""

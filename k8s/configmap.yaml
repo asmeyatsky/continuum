@@ -1,0 +1,53 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: continuum-config
+  namespace: continuum
+data:
+  # Application
+  APP_NAME: "Continuum"
+  DEBUG: "false"
+  LOG_LEVEL: "INFO"
+
+  # Database
+  DATABASE_POOL_SIZE: "10"
+  DATABASE_MAX_OVERFLOW: "20"
+  DATABASE_POOL_TIMEOUT: "30"
+  USE_PERSISTENT_GRAPH: "true"
+
+  # Caching
+  CACHE_TYPE: "redis"
+  CACHE_TTL_SECONDS: "3600"
+  CACHE_MAX_SIZE: "1000"
+
+  # Tracing
+  TRACING_ENABLED: "true"
+  TRACING_EXPORTER: "jaeger"
+  TRACING_JAEGER_HOST: "jaeger"
+  TRACING_JAEGER_PORT: "6831"
+
+  # Feature Flags
+  FEATURE_REAL_WEB_SEARCH: "false"
+  FEATURE_REAL_IMAGE_GENERATION: "false"
+  FEATURE_PERSISTENT_LEARNING: "true"
+  FEATURE_DISTRIBUTED_TRACING: "true"
+
+  # Image Generation Stable Diffusion endpoint (optional)
+  # STABLE_DIFFUSION_ENDPOINT: "http://stable-diffusion:7860"
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: continuum-secrets
+  namespace: continuum
+type: Opaque
+data:
+  # Base64 encoded secrets - replace with actual values
+  database-url: cG9zdGdyZXM6Ly9jb250aW51dW1fdXNlcjpjb250aW51dW1fcGFzc3dvcmRAcG9zdGdyZXM6NTQzMi9jb250aW51bQ==
+  redis-url: cmVkaXM6Ly9yZWRpczozNjc5LzA=
+  openai-api-key: ""  # Set via external secrets management
+  brave-search-api-key: ""
+  google-search-api-key: ""
+  google-search-engine-id: ""
+  tavily-api-key: ""
