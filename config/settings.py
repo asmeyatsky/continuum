@@ -26,8 +26,13 @@ class Settings(BaseSettings):
     API_WORKERS: int = 4
 
     # Database
+    # Format: postgresql://user:password@localhost:5432/continuum (for PostgreSQL)
+    # or: sqlite:///./continuum.db (for SQLite)
     DATABASE_URL: str = "sqlite:///./continuum.db"
     DATABASE_POOL_SIZE: int = 5
+    DATABASE_MAX_OVERFLOW: int = 10
+    DATABASE_POOL_TIMEOUT: int = 30
+    USE_PERSISTENT_GRAPH: bool = False  # Use database instead of in-memory graph
 
     # Knowledge Graph
     KNOWLEDGE_GRAPH_MAX_NODES: int = 10000
@@ -54,10 +59,26 @@ class Settings(BaseSettings):
     MAX_CONTENT_LENGTH: int = 10000
     QUALITY_THRESHOLD: float = 0.75
 
-    # Performance
+    # Performance & Caching
     ENABLE_CACHING: bool = True
     CACHE_TTL_SECONDS: int = 3600
     ASYNC_BATCH_SIZE: int = 10
+    REDIS_URL: Optional[str] = None  # redis://localhost:6379/0
+
+    # Feature Flags
+    FEATURE_REAL_WEB_SEARCH: bool = False  # Use real web search instead of mocks
+    FEATURE_REAL_IMAGE_GENERATION: bool = False  # Use real image generation
+    FEATURE_PERSISTENT_LEARNING: bool = True  # Enable persistent learning system
+    FEATURE_DISTRIBUTED_TRACING: bool = False  # Enable OpenTelemetry tracing
+
+    # Web Search Integration
+    BRAVE_SEARCH_API_KEY: Optional[str] = None
+    GOOGLE_SEARCH_API_KEY: Optional[str] = None
+    GOOGLE_SEARCH_ENGINE_ID: Optional[str] = None
+    TAVILY_API_KEY: Optional[str] = None
+
+    # Image Generation
+    OPENAI_IMAGE_API_KEY: Optional[str] = None  # Uses OPENAI_API_KEY by default
 
     class Config:
         """Pydantic config."""
