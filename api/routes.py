@@ -87,10 +87,12 @@ async def get_exploration_status(exploration_id: str):
         return ConceptExpansionResponse(
             exploration_id=exploration_id,
             concept=exploration.concept,
-            status=exploration.status,
+            status=exploration.status.value if hasattr(exploration.status, 'value') else str(exploration.status),
             nodes_count=nodes,
             connections_count=edges,
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error getting exploration status: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -109,7 +111,7 @@ async def get_knowledge_graph(limit: int = Query(100, ge=1, le=1000)):
 
     try:
         nodes = list(_engine.knowledge_graph.nodes.values())[:limit]
-        edges = _engine.knowledge_graph.edges[:limit]
+        edges = list(_engine.knowledge_graph.edges.values())[:limit] if isinstance(_engine.knowledge_graph.edges, dict) else _engine.knowledge_graph.edges[:limit]
 
         node_responses = [
             ConceptNodeResponse(
@@ -123,15 +125,16 @@ async def get_knowledge_graph(limit: int = Query(100, ge=1, le=1000)):
             for node in nodes
         ]
 
-        edge_responses = [
-            GraphEdgeResponse(
-                source=edge.source,
-                target=edge.target,
-                relationship_type=edge.relationship_type,
-                weight=edge.weight,
+        edge_responses = []
+        for edge in edges:
+            edge_responses.append(
+                GraphEdgeResponse(
+                    source=edge.source_node_id,
+                    target=edge.target_node_id,
+                    relationship_type=edge.relationship_type,
+                    weight=edge.weight,
+                )
             )
-            for edge in edges
-        ]
 
         return KnowledgeGraphResponse(
             nodes=node_responses,
@@ -139,6 +142,8 @@ async def get_knowledge_graph(limit: int = Query(100, ge=1, le=1000)):
             total_nodes=len(_engine.knowledge_graph.nodes),
             total_edges=len(_engine.knowledge_graph.edges),
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error retrieving knowledge graph: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -230,9 +235,8 @@ async def submit_feedback(request: FeedbackRequest):
         raise HTTPException(status_code=500, detail="Engine not initialized")
 
     try:
-        _engine.feedback_system.record_feedback(
-            exploration_id=request.exploration_id,
-            feedback_type=request.feedback_type,
+        _engine.feedback_system.record_user_feedback(
+            item_id=request.exploration_id,
             rating=request.rating,
             comment=request.comment,
         )
@@ -240,6 +244,8 @@ async def submit_feedback(request: FeedbackRequest):
         return FeedbackResponse(
             success=True, message="Feedback recorded successfully"
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error recording feedback: {e}")
         raise HTTPException(status_code=500, detail=str(e))

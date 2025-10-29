@@ -98,9 +98,9 @@ class ConceptOrchestrator(ABC):
 
 class DefaultConceptOrchestrator(ConceptOrchestrator):
     """Default implementation of the concept orchestrator"""
-    
+
     def __init__(self, knowledge_graph=None):
-        self.explorations: Dict[str, List[ExplorationTask]] = {}
+        self.explorations: Dict[str, Exploration] = {}
         self.nodes: Dict[str, ConceptNode] = {}
         self.task_queue: List[ExplorationTask] = []
         # Add knowledge_graph attribute as expected by the API
@@ -108,7 +108,7 @@ class DefaultConceptOrchestrator(ConceptOrchestrator):
         self.knowledge_graph = knowledge_graph or InMemoryKnowledgeGraphEngine()
         # Add orchestrator attribute for compatibility
         self.orchestrator = self
-    
+
     def submit_exploration_request(self, initial_concept: str) -> str:
         """Submit a new exploration request and return exploration ID"""
         exploration_id = str(uuid.uuid4())
@@ -120,7 +120,7 @@ class DefaultConceptOrchestrator(ConceptOrchestrator):
             priority=10,
             status=ExplorationState.PENDING
         )
-        
+
         # Create an exploration object with the initial concept
         exploration = Exploration(
             id=exploration_id,
@@ -128,21 +128,21 @@ class DefaultConceptOrchestrator(ConceptOrchestrator):
             status=ExplorationState.IN_PROGRESS,
             tasks=[initial_task]
         )
-        
+
         self.explorations[exploration_id] = exploration
         self.task_queue.append(initial_task)
-        
+
         return exploration_id
-    
+
     def submit_concept(self, initial_concept: str) -> str:
         """Submit a concept for expansion - API compatibility method"""
         return self.submit_exploration_request(initial_concept)
-    
+
     def get_exploration_status(self, exploration_id: str) -> ExplorationState:
         """Get the current status of an exploration"""
         if exploration_id not in self.explorations:
             raise ValueError(f"Exploration {exploration_id} not found")
-        
+
         exploration = self.explorations[exploration_id]
         # Update status based on tasks
         tasks = exploration.tasks
@@ -154,53 +154,46 @@ class DefaultConceptOrchestrator(ConceptOrchestrator):
             exploration.status = ExplorationState.PAUSED
         else:
             exploration.status = ExplorationState.IN_PROGRESS
-        
+
         return exploration.status
-    
-    def __init__(self, knowledge_graph=None):
-        self.explorations: Dict[str, Exploration] = {}
-        self.nodes: Dict[str, ConceptNode] = {}
-        self.task_queue: List[ExplorationTask] = []
-        # Add knowledge_graph attribute as expected by the API
-        from knowledge_graph.engine import InMemoryKnowledgeGraphEngine
-        self.knowledge_graph = knowledge_graph or InMemoryKnowledgeGraphEngine()
-        # Add orchestrator attribute for compatibility
-        self.orchestrator = self
-    
+
     def pause_exploration(self, exploration_id: str) -> bool:
         """Pause an ongoing exploration"""
         if exploration_id not in self.explorations:
             return False
-        
-        for task in self.explorations[exploration_id]:
+
+        exploration = self.explorations[exploration_id]
+        for task in exploration.tasks:
             if task.status == ExplorationState.IN_PROGRESS:
                 task.status = ExplorationState.PAUSED
-        
+
         return True
-    
+
     def resume_exploration(self, exploration_id: str) -> bool:
         """Resume a paused exploration"""
         if exploration_id not in self.explorations:
             return False
-        
-        for task in self.explorations[exploration_id]:
+
+        exploration = self.explorations[exploration_id]
+        for task in exploration.tasks:
             if task.status == ExplorationState.PAUSED:
                 task.status = ExplorationState.PENDING
                 self.task_queue.append(task)
-        
+
         return True
-    
+
     def get_exploration_results(self, exploration_id: str) -> List[ConceptNode]:
         """Get all results from an exploration"""
         if exploration_id not in self.explorations:
             return []
-        
+
         # Get all concept nodes created during this exploration
         result_nodes = []
-        for task in self.explorations[exploration_id]:
+        exploration = self.explorations[exploration_id]
+        for task in exploration.tasks:
             # This would be populated by agent results in a real system
             pass
-        
+
         return result_nodes
     
     def get_next_task(self) -> Optional[ExplorationTask]:

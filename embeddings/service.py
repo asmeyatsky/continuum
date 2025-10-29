@@ -6,8 +6,29 @@ Uses Sentence Transformers for high-quality embeddings.
 import logging
 from typing import List, Optional
 import numpy as np
-from sklearn.metrics.pairwise import cosine_similarity
 from config.settings import settings
+
+try:
+    from sklearn.metrics.pairwise import cosine_similarity
+    HAS_SKLEARN = True
+except ImportError:
+    HAS_SKLEARN = False
+    def cosine_similarity(X, Y=None):
+        """Fallback cosine similarity implementation."""
+        if Y is None:
+            Y = X
+        if X.ndim == 1:
+            X = X.reshape(1, -1)
+        if Y.ndim == 1:
+            Y = Y.reshape(1, -1)
+
+        X_norm = np.linalg.norm(X, axis=1, keepdims=True)
+        Y_norm = np.linalg.norm(Y, axis=1, keepdims=True)
+
+        X_norm[X_norm == 0] = 1
+        Y_norm[Y_norm == 0] = 1
+
+        return np.dot(X / X_norm, (Y / Y_norm).T)
 
 logger = logging.getLogger(__name__)
 
