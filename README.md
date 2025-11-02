@@ -44,7 +44,7 @@ The **Infinite Concept Expansion Engine** is the world's first truly autonomous 
 ### New Features in v1.1
 
 - **🔌 REST API**: Full FastAPI-based REST endpoints for programmatic access
-- **🧠 Dual LLM Support**: Seamless integration with OpenAI (GPT-4) and Anthropic (Claude)
+- **🧠 Multi-LLM Support**: Seamless integration with OpenAI (GPT-4), Anthropic (Claude), Qwen (Alibaba), and Google (Gemini)
 - **🔍 Semantic Search**: Sentence Transformer embeddings for intelligent concept discovery
 - **💾 Database Persistence**: SQLAlchemy models with SQLite + migration to production DBs
 - **⚙️ Config Management**: Environment-based settings with .env support
@@ -82,6 +82,9 @@ project/
 │   ├── base.py                   # LLMService abstract interface
 │   ├── openai_service.py         # OpenAI (GPT-4) implementation
 │   ├── anthropic_service.py      # Anthropic (Claude) implementation
+│   ├── qwen_service.py           # Qwen (Alibaba) implementation
+│   ├── gemini_service.py         # Google Gemini implementation
+│   ├── gemini_cli_service.py     # Google Gemini CLI implementation
 │   └── factory.py                # LLM provider factory
 ├── embeddings/                    # Semantic embeddings
 │   └── service.py                # Sentence Transformer embeddings
@@ -132,7 +135,7 @@ project/
 - **📊 Advanced Visualization**: Plotly, NetworkX, Matplotlib for stunning 3D graphs
 - **🧠 Persistent Learning**: JSON-based learning history with cross-session persistence
 - **🔄 Real-time Monitoring**: Evolution insights and system health tracking
-- **LLM Integration**: OpenAI GPT-4o or equivalent for reasoning
+- **LLM Integration**: OpenAI GPT-4, Anthropic Claude, Qwen, or Google Gemini for reasoning
 - **💾 Vector Database**: Pinecone, Weaviate, or pgvector for embeddings
 - **🔗 Graph Database**: Neo4j for relationship mapping
 - **🎨 Multimodal Generation**: DALL-E, Midjourney, ElevenLabs, etc.
@@ -166,7 +169,15 @@ pip install -r requirements.txt
 cp .env.example .env
 # Edit .env with your API keys
 export OPENAI_API_KEY=your-key-here
-export LLM_PROVIDER=openai
+export LLM_PROVIDER=openai  # Or "anthropic", "qwen", "gemini", "gemini-cli"
+
+# For Qwen:
+export QWEN_API_KEY=your-qwen-key-here
+export LLM_PROVIDER=qwen
+
+# For Google Gemini:
+export GEMINI_API_KEY=your-gemini-key-here
+export LLM_PROVIDER=gemini
 
 # 3. Run the API server
 python -m api.app
@@ -188,9 +199,12 @@ Create a `.env` file based on `.env.example`:
 
 ```bash
 # LLM Configuration
-LLM_PROVIDER=openai              # or "anthropic"
+LLM_PROVIDER=openai              # "openai", "anthropic", "qwen", "gemini", or "gemini-cli"
 OPENAI_API_KEY=sk-...           # For OpenAI
 ANTHROPIC_API_KEY=sk-ant-...    # For Anthropic
+QWEN_API_KEY=your-key-here      # For Qwen
+GEMINI_API_KEY=your-key-here    # For Google Gemini
+GEMINI_CLI_MODEL=gemini-pro     # For Gemini CLI
 
 # API Configuration
 API_HOST=0.0.0.0

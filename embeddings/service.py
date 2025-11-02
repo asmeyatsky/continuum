@@ -88,47 +88,70 @@ class EmbeddingService:
 
     def _encode_with_cache(self, text: str) -> np.ndarray:
         """Encode with caching enabled."""
-        import asyncio
+        import concurrent.futures
+
         from cache import get_cache
 
         cache = get_cache()
         cache_key = f"embedding:{self.model_name}:{text[:100]}"
 
         # Try to get from cache (convert to list for JSON serialization)
+        cached_list = None
         try:
-            loop = asyncio.get_event_loop()
-            cached_list = loop.run_until_complete(cache.get(cache_key))
-            if cached_list is not None:
-                logger.debug(f"Embedding cache hit: {text[:50]}...")
-                return np.array(cached_list, dtype=np.float32)
-        except RuntimeError:
-            cached_list = asyncio.run(cache.get(cache_key))
-            if cached_list is not None:
-                logger.debug(f"Embedding cache hit: {text[:50]}...")
-                return np.array(cached_list, dtype=np.float32)
+            # Use a thread pool to run async operations safely
+            def run_async_in_thread(coro):
+                """Run async operation in a new event loop in a separate thread."""
+                def run_in_thread():
+                    import asyncio
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        return loop.run_until_complete(coro)
+                    finally:
+                        loop.close()
+                
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(run_in_thread)
+                    return future.result()
+            
+            cached_list = run_async_in_thread(cache.get(cache_key))
+        except Exception as e:
+            logger.warning(f"Cache retrieval failed: {e}, proceeding without cache")
+            
+        if cached_list is not None:
+            logger.debug(f"Embedding cache hit: {text[:50]}...")
+            return np.array(cached_list, dtype=np.float32)
 
         # Compute embedding
         embedding = self._encode_uncached(text)
 
         # Store in cache as list (JSON serializable)
         try:
-            loop = asyncio.get_event_loop()
-            if not loop.is_running():
-                loop.run_until_complete(
-                    cache.set(
-                        cache_key,
-                        embedding.tolist(),
-                        settings.CACHE_TTL_SECONDS,
-                    )
-                )
-        except RuntimeError:
-            asyncio.run(
+            # Use same thread pool approach for cache storage
+            def run_async_in_thread(coro):
+                """Run async operation in a new event loop in a separate thread."""
+                def run_in_thread():
+                    import asyncio
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        return loop.run_until_complete(coro)
+                    finally:
+                        loop.close()
+                
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(run_in_thread)
+                    return future.result()
+            
+            run_async_in_thread(
                 cache.set(
                     cache_key,
                     embedding.tolist(),
                     settings.CACHE_TTL_SECONDS,
                 )
             )
+        except Exception as e:
+            logger.warning(f"Cache storage failed: {e}, continuing without cache")
 
         return embedding
 

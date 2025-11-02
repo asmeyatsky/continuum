@@ -40,11 +40,17 @@ class Settings(BaseSettings):
     EMBEDDING_DIM: int = 384
 
     # LLM Configuration
-    LLM_PROVIDER: str = "openai"  # "openai" or "anthropic"
+    LLM_PROVIDER: str = "openai"  # "openai", "anthropic", "qwen", "gemini", or "gemini-cli"
     OPENAI_API_KEY: Optional[str] = None
     OPENAI_MODEL: str = "gpt-4o"
     ANTHROPIC_API_KEY: Optional[str] = None
     ANTHROPIC_MODEL: str = "claude-3-opus-20240229"
+    QWEN_API_KEY: Optional[str] = None
+    QWEN_MODEL: str = "qwen-max"
+    QWEN_BASE_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    GEMINI_API_KEY: Optional[str] = None
+    GEMINI_MODEL: str = "gemini-1.5-pro"
+    GEMINI_CLI_MODEL: str = "gemini-pro"
     LLM_TEMPERATURE: float = 0.7
     LLM_MAX_TOKENS: int = 2000
 

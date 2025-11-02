@@ -152,8 +152,32 @@ class SmartImageAgent(HybridImageAgent):
 
     def process_task(self, task: ExplorationTask) -> AgentResponse:
         """Process image generation with caching and fallback."""
+        import concurrent.futures
+        import threading
+        
+        # Use a thread pool to run async operations safely
+        def run_async_in_thread(coro):
+            """Run async operation in a new event loop in a separate thread."""
+            def run_in_thread():
+                import asyncio
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    return loop.run_until_complete(coro)
+                finally:
+                    loop.close()
+            
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(run_in_thread)
+                return future.result()
+        
         # Check distributed cache first
-        cache_result = asyncio.run(self._get_cached_result(task.concept))
+        cache_result = None
+        try:
+            cache_result = run_async_in_thread(self._get_cached_result(task.concept))
+        except Exception as e:
+            logger.warning(f"Cache retrieval failed: {e}, proceeding without cache")
+        
         if cache_result is not None:
             logger.debug(f"Using cached images for '{task.concept}'")
             return AgentResponse(
@@ -173,9 +197,14 @@ class SmartImageAgent(HybridImageAgent):
 
         # Cache successful results
         if response.success and isinstance(response.data, dict):
-            asyncio.run(self._cache_result(task.concept, response.data))
-            self._local_cache[task.concept] = response.data
-            self._generation_count += 1
+            try:
+                run_async_in_thread(self._cache_result(task.concept, response.data))
+                self._local_cache[task.concept] = response.data
+                self._generation_count += 1
+            except Exception as e:
+                logger.warning(f"Cache storage failed: {e}, continuing without cache")
+                self._local_cache[task.concept] = response.data
+                self._generation_count += 1
 
         return response
 
