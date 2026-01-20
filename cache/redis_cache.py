@@ -12,7 +12,7 @@ from typing import Any, Optional, Dict
 from datetime import datetime
 
 try:
-    import aioredis
+    from redis import asyncio as aioredis
     HAS_ASYNC_REDIS = True
 except ImportError:
     HAS_ASYNC_REDIS = False

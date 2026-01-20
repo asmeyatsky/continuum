@@ -9,10 +9,20 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 from core.concept_orchestrator import ConceptNode
-from embeddings.service import EmbeddingService
+try:
+    from embeddings.service import EmbeddingService
+except ImportError:
+    EmbeddingService = None
+
 import uuid
 from datetime import datetime
-import numpy as np
+
+try:
+    import numpy as np
+    NDArray = np.ndarray
+except ImportError:
+    np = None
+    NDArray = Any
 
 logger = logging.getLogger(__name__)
 
@@ -82,12 +92,18 @@ class InMemoryKnowledgeGraphEngine(KnowledgeGraphEngine):
     def __init__(self, embedding_service: Optional[EmbeddingService] = None):
         self.nodes: Dict[str, ConceptNode] = {}
         self.edges: Dict[str, GraphEdge] = {}
-        self.embeddings: Dict[str, np.ndarray] = {}  # Sentence Transformer embeddings
+        self.embeddings: Dict[str, NDArray] = {}  # Sentence Transformer embeddings
 
         # Initialize embedding service
         try:
-            self.embedding_service = embedding_service or EmbeddingService()
-            logger.info("Using Sentence Transformer embeddings for semantic search")
+            if embedding_service:
+                self.embedding_service = embedding_service
+            elif EmbeddingService:
+                self.embedding_service = EmbeddingService()
+                logger.info("Using Sentence Transformer embeddings for semantic search")
+            else:
+                self.embedding_service = None
+                logger.warning("EmbeddingService not available. Using fallback.")
         except Exception as e:
             logger.warning(f"Could not load embedding service: {e}. Using fallback.")
             self.embedding_service = None
@@ -271,7 +287,7 @@ class InMemoryKnowledgeGraphEngine(KnowledgeGraphEngine):
         
         return subgraph_nodes, subgraph_edges
     
-    def _generate_fallback_embedding(self, text: str) -> np.ndarray:
+    def _generate_fallback_embedding(self, text: str) -> NDArray:
         """
         Generate a fallback embedding for the text.
 
@@ -280,6 +296,10 @@ class InMemoryKnowledgeGraphEngine(KnowledgeGraphEngine):
         """
         # Simple TF-IDF-like fallback using character frequency
         text_lower = text.lower() if text else ""
+
+        if np is None:
+            # Return a simple list if numpy is not available
+            return [0.0] * 384
 
         # Create a 384-dimensional embedding (matching Sentence Transformer output)
         embedding = np.zeros(384, dtype=np.float32)

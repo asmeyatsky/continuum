@@ -103,6 +103,8 @@ def create_app(engine=None) -> FastAPI:
         from content_generation.multimodal import MockMultimodalContentGenerator
         from data_pipeline.ingestion import MockDataIngestionPipeline
         from llm_service.factory import get_llm_service
+        from database.database import get_db, engine as db_engine, Base
+        from knowledge_graph.persistent_engine import PersistentKnowledgeGraphEngine
 
         logger = logging.getLogger(__name__)
         logger.info(f"Starting {settings.APP_NAME} v{settings.APP_VERSION}")
@@ -123,8 +125,27 @@ def create_app(engine=None) -> FastAPI:
                 ingestion_pipeline = MockDataIngestionPipeline()
                 logger.info("Data ingestion pipeline initialized")
                 
-                knowledge_graph = InMemoryKnowledgeGraphEngine()
-                logger.info("Knowledge graph engine initialized")
+                # Initialize Knowledge Graph Engine
+                # Check if we should use persistent storage
+                if settings.DATABASE_URL and "sqlite" not in settings.DATABASE_URL:
+                    # Ensure tables exist (for production, use Alembic, but this is a safety net)
+                    Base.metadata.create_all(bind=db_engine)
+                    
+                    # Create a session for the graph engine
+                    # Note: In a real app, we might want to manage sessions differently
+                    # or pass a session factory. For now, we create a dedicated session.
+                    from sqlalchemy.orm import sessionmaker
+                    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=db_engine)
+                    db_session = SessionLocal()
+                    
+                    knowledge_graph = PersistentKnowledgeGraphEngine(
+                        db_session=db_session,
+                        embedding_service=None # Can be added if needed
+                    )
+                    logger.info("Persistent Knowledge Graph Engine initialized")
+                else:
+                    knowledge_graph = InMemoryKnowledgeGraphEngine()
+                    logger.info("In-Memory Knowledge Graph Engine initialized")
                 
                 feedback_system = SelfImprovingFeedbackSystem()
                 logger.info("Feedback system initialized")

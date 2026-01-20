@@ -86,3 +86,7 @@ def get_db() -> Session:
         yield db
     finally:
         db.close()
+
+
+# Export engine and Base for backward compatibility
+engine = get_db_manager().engine

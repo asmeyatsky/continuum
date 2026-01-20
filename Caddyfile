@@ -1,0 +1,11 @@
+# Caddyfile for automatic HTTPS
+
+# Replace with your domain name
+# example.com {
+#     reverse_proxy api:8000
+# }
+
+# For now, just proxy localhost or IP
+:80 {
+    reverse_proxy api:8000
+}

@@ -14,8 +14,8 @@ services:
       - DEBUG=false
       - LOG_LEVEL=INFO
 
-      # Database
-      - DATABASE_URL=postgresql://continuum_user:continuum_password@postgres:5432/continuum
+      # Database (using SQLite for simplicity)
+      - DATABASE_URL=sqlite:///./data/continuum.db
       - USE_PERSISTENT_GRAPH=true
 
       # Caching
@@ -35,14 +35,20 @@ services:
       - FEATURE_PERSISTENT_LEARNING=true
       - FEATURE_DISTRIBUTED_TRACING=true
 
+      # LLM Configuration
+      - LLM_PROVIDER=${LLM_PROVIDER:-gemini}
+      - LLM_TEMPERATURE=${LLM_TEMPERATURE:-0.7}
+      - LLM_MAX_TOKENS=${LLM_MAX_TOKENS:-2000}
+
       # API Keys (set via environment or secrets)
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - QWEN_API_KEY=${QWEN_API_KEY:-}
       - BRAVE_SEARCH_API_KEY=${BRAVE_SEARCH_API_KEY:-}
       - GOOGLE_SEARCH_API_KEY=${GOOGLE_SEARCH_API_KEY:-}
       - TAVILY_API_KEY=${TAVILY_API_KEY:-}
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
       jaeger:
@@ -52,6 +58,25 @@ services:
     restart: unless-stopped
     volumes:
       - ./logs:/app/logs
+      - ./data:/app/data
+
+  # Frontend Application
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: continuum-frontend
+    ports:
+      - "3002:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:8000/api
+    depends_on:
+      - continuum
+    networks:
+      - continuum-network
+    restart: unless-stopped
+    stdin_open: true # Add this for React hot reloading support in Docker
+    tty: true # Add this for React hot reloading support in Docker
 
   # PostgreSQL Database
   postgres:
@@ -66,7 +91,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U continuum_user"]
+      test: [ "CMD-SHELL", "pg_isready -U continuum_user" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -84,7 +109,7 @@ services:
       - redis_data:/data
     command: redis-server --appendonly yes
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -100,8 +125,8 @@ services:
       - COLLECTOR_ZIPKIN_HOST_PORT=:9411
       - MEMORY_MAX_TRACES=10000
     ports:
-      - "6831:6831/udp"  # Jaeger agent
-      - "16686:16686"    # Jaeger UI
+      - "6831:6831/udp" # Jaeger agent
+      - "16686:16686" # Jaeger UI
     networks:
       - continuum-network
     restart: unless-stopped
@@ -111,7 +136,7 @@ services:
     image: prom/prometheus:latest
     container_name: continuum-prometheus
     ports:
-      - "9090:9090"
+      - "9091:9090"
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus_data:/prometheus
@@ -127,7 +152,7 @@ services:
     image: grafana/grafana:latest
     container_name: continuum-grafana
     ports:
-      - "3000:3000"
+      - "3001:3000"
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
       - GF_USERS_ALLOW_SIGN_UP=false

@@ -32,7 +32,7 @@ class ConceptNodeModel(Base):
     relevance_score = Column(Float, default=0.0)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    metadata = Column(Text, nullable=True)  # Stored as JSON string
+    meta_data = Column(Text, nullable=True)  # Stored as JSON string
 
     # Relationships
     edges_source = relationship(
@@ -82,7 +82,7 @@ class ExplorationModel(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     completed_at = Column(DateTime, nullable=True)
-    metadata = Column(Text, nullable=True)  # Stored as JSON string
+    meta_data = Column(Text, nullable=True)  # Stored as JSON string
 
     def __repr__(self) -> str:
         return f"<ExplorationModel(id={self.id}, concept={self.concept}, status={self.status})>"
