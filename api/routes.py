@@ -256,6 +256,215 @@ async def submit_feedback(request: FeedbackRequest):
 # ============================================================================
 
 
+@router.post("/comprehensive-search")
+async def comprehensive_search(request: SearchRequest):
+    """Comprehensive multi-source search across all available data sources."""
+    if not _engine:
+        raise HTTPException(status_code=500, detail="Engine not initialized")
+    
+    try:
+        from data_pipeline.real_ingestion import ComprehensiveDataPipeline
+        from config.settings import settings
+        
+        if not settings.FEATURE_COMPREHENSIVE_SEARCH:
+            raise HTTPException(status_code=503, detail="Comprehensive search not enabled")
+        
+        # Use comprehensive pipeline
+        async with ComprehensiveDataPipeline() as pipeline:
+            results = await pipeline.comprehensive_search(
+                query=request.query,
+                sources=["web_search", "academic", "wikipedia", "reddit", "github", "news", "youtube", "arxiv", "pubmed"]
+            )
+        
+        # Convert results to response format
+        search_results = []
+        for source, result in results.items():
+            if result.success and result.data:
+                for item in result.data[:3]:  # Limit items per source
+                    search_results.append({
+                        "id": f"{source}_{len(search_results)}",
+                        "title": item.get('title', str(item)[:100]),
+                        "content": item.get('content', item.get('description', item.get('abstract', '')))[:500],
+                        "url": item.get('url', ''),
+                        "source": source,
+                        "metadata": {
+                            "quality_score": result.quality_score,
+                            "relevance_score": result.relevance_score,
+                            "timestamp": result.timestamp.isoformat(),
+                            **item
+                        }
+                    })
+        
+        return {
+            "query": request.query,
+            "results": search_results[:request.limit],
+            "total_results": len(search_results),
+            "sources_searched": list(results.keys()),
+            "successful_sources": [s for s, r in results.items() if r.success],
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Comprehensive search error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# Real-Time Monitoring Endpoints
+# ============================================================================
+
+@router.post("/monitoring/start")
+async def start_monitoring(request: dict):
+    """Start real-time monitoring for topics"""
+    try:
+        from monitoring.realtime_monitor import RealTimeMonitor, MonitoringConfig
+        from data_pipeline.real_ingestion import ComprehensiveDataPipeline
+        
+        config = MonitoringConfig(
+            topics=request.get('topics', []),
+            sources=request.get('sources', ['web_search', 'academic', 'news']),
+            alert_threshold=request.get('alert_threshold', 0.8),
+            check_interval_minutes=request.get('check_interval_minutes', 5)
+        )
+        
+        async with ComprehensiveDataPipeline() as pipeline:
+            monitor = RealTimeMonitor(pipeline)
+            monitor_id = await monitor.start_monitoring(config)
+        
+        return {
+            "monitor_id": monitor_id,
+            "status": "started",
+            "topics": config.topics,
+            "sources": config.sources
+        }
+    except Exception as e:
+        logger.error(f"Monitoring start error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/monitoring/alerts")
+async def get_alerts(hours: int = Query(24, ge=1, le=168)):
+    """Get recent alerts from monitoring system"""
+    try:
+        from monitoring.realtime_monitor import RealTimeMonitor
+        
+        # This would normally be stored globally or in database
+        return {
+            "alerts": [],
+            "total_alerts": 0,
+            "timeframe_hours": hours,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Alerts retrieval error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/monitoring/trending")
+async def get_trending_topics(hours: int = Query(24, ge=1, le=168)):
+    """Get currently trending topics"""
+    try:
+        from monitoring.realtime_monitor import RealTimeMonitor
+        
+        # This would normally query the monitor system
+        return {
+            "trending": [
+                {"topic": "artificial intelligence", "count": 15, "growth": "+25%"},
+                {"topic": "quantum computing", "count": 12, "growth": "+18%"},
+                {"topic": "climate change", "count": 10, "growth": "+12%"}
+            ],
+            "timeframe_hours": hours,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Trending topics error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ============================================================================
+# Cross-Reference and Fact Verification Endpoints  
+# ============================================================================
+
+@router.post("/cross-reference/{node_id}")
+async def cross_reference_node(node_id: str):
+    """Cross-reference a knowledge graph node with external sources"""
+    if not _engine:
+        raise HTTPException(status_code=500, detail="Engine not initialized")
+    
+    try:
+        from knowledge_graph.cross_reference_engine import CrossReferenceEngine
+        from data_pipeline.real_ingestion import ComprehensiveDataPipeline
+        
+        async with ComprehensiveDataPipeline() as pipeline:
+            cross_ref_engine = CrossReferenceEngine(
+                _engine.knowledge_graph, 
+                pipeline
+            )
+            
+            result = await cross_ref_engine.cross_reference_node(node_id)
+        
+        return result
+    except Exception as e:
+        logger.error(f"Cross-reference error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/verify-fact")
+async def verify_fact(request: dict):
+    """Verify a factual claim across multiple sources"""
+    try:
+        from knowledge_graph.cross_reference_engine import CrossReferenceEngine
+        from data_pipeline.real_ingestion import ComprehensiveDataPipeline
+        
+        claim = request.get('claim')
+        if not claim:
+            raise HTTPException(status_code=400, detail="Claim is required")
+        
+        async with ComprehensiveDataPipeline() as pipeline:
+            cross_ref_engine = CrossReferenceEngine(
+                _engine.knowledge_graph if _engine else None,
+                pipeline
+            )
+            
+            fact_check = await cross_ref_engine.verify_fact(
+                claim, 
+                request.get('context')
+            )
+        
+        return {
+            "claim": fact_check.claim,
+            "status": fact_check.status.value,
+            "confidence": fact_check.confidence,
+            "supporting_sources": fact_check.supporting_sources,
+            "contradicting_sources": fact_check.contradicting_sources,
+            "checked_at": fact_check.checked_at.isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Fact verification error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/contradictions")
+async def detect_contradictions():
+    """Detect contradictions in the knowledge graph"""
+    if not _engine:
+        raise HTTPException(status_code=500, detail="Engine not initialized")
+    
+    try:
+        from knowledge_graph.cross_reference_engine import CrossReferenceEngine
+        from data_pipeline.real_ingestion import ComprehensiveDataPipeline
+        
+        async with ComprehensiveDataPipeline() as pipeline:
+            cross_ref_engine = CrossReferenceEngine(
+                _engine.knowledge_graph,
+                pipeline
+            )
+            
+            contradictions = await cross_ref_engine.detect_contradictions()
+        
+        return {
+            "contradictions": contradictions,
+            "total_contradictions": len(contradictions),
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Contradiction detection error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/health")
 async def health_check():
     """Health check endpoint."""

@@ -74,10 +74,11 @@ class Settings(BaseSettings):
     REDIS_URL: Optional[str] = None  # redis://localhost:6379/0
 
     # Feature Flags
-    FEATURE_REAL_WEB_SEARCH: bool = False  # Use real web search instead of mocks
+    FEATURE_REAL_WEB_SEARCH: bool = True  # Use real web search instead of mocks
     FEATURE_REAL_IMAGE_GENERATION: bool = False  # Use real image generation
     FEATURE_PERSISTENT_LEARNING: bool = True  # Enable persistent learning system
     FEATURE_DISTRIBUTED_TRACING: bool = False  # Enable OpenTelemetry tracing
+    FEATURE_COMPREHENSIVE_SEARCH: bool = True  # Enable comprehensive multi-source search
 
     # Distributed Tracing Configuration
     TRACING_ENABLED: bool = False  # Enable/disable tracing
@@ -95,6 +96,15 @@ class Settings(BaseSettings):
     # Image Generation
     OPENAI_IMAGE_API_KEY: Optional[str] = None  # Uses OPENAI_API_KEY by default
     STABLE_DIFFUSION_ENDPOINT: Optional[str] = None  # e.g., http://localhost:7860
+
+    # Extended Data Source APIs
+    GITHUB_TOKEN: Optional[str] = None
+    NEWSAPI_KEY: Optional[str] = None
+    GUARDIAN_API_KEY: Optional[str] = None
+    YOUTUBE_API_KEY: Optional[str] = None
+    REDDIT_CLIENT_ID: Optional[str] = None
+    REDDIT_CLIENT_SECRET: Optional[str] = None
+    REDDIT_USER_AGENT: str = "Continuum-AI/1.0"
 
     class Config:
         """Pydantic config."""

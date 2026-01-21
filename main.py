@@ -9,6 +9,7 @@ from core.concept_orchestrator import DefaultConceptOrchestrator
 from agents.base import AgentManager
 from knowledge_graph.engine import InMemoryKnowledgeGraphEngine
 from data_pipeline.ingestion import MockDataIngestionPipeline
+from data_pipeline.real_ingestion import ComprehensiveDataPipeline
 from content_generation.multimodal import MockMultimodalContentGenerator
 from feedback_system.core import SelfImprovingFeedbackSystem
 from utils.visualization import AdvancedKnowledgeGraphVisualizer, PersistentLearningSystem, RealTimeEvolutionMonitor
@@ -29,7 +30,12 @@ class EnhancedInfiniteConceptExpansionEngine:
         self.orchestrator = DefaultConceptOrchestrator()
         self.agent_manager = AgentManager()
         self.knowledge_graph = InMemoryKnowledgeGraphEngine()
-        self.data_pipeline = MockDataIngestionPipeline()
+        # Use real data pipeline if feature flag is enabled
+        from config.settings import settings
+        if settings.FEATURE_COMPREHENSIVE_SEARCH:
+            self.data_pipeline = ComprehensiveDataPipeline()
+        else:
+            self.data_pipeline = MockDataIngestionPipeline()
         self.content_generator = MockMultimodalContentGenerator()
         self.feedback_system = SelfImprovingFeedbackSystem()
         
