@@ -63,6 +63,17 @@ export const conceptApi = {
     }
   },
 
+  // Get nodes discovered during an exploration
+  getExplorationNodes: async (explorationId) => {
+    try {
+      const response = await apiClient.get(`/concepts/${explorationId}/nodes`);
+      return response.data;
+    } catch (error) {
+      console.error('Error getting exploration nodes:', error);
+      throw error;
+    }
+  },
+
   // Get knowledge graph
   getKnowledgeGraph: async (limit = 100) => {
     try {

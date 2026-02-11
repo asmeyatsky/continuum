@@ -82,25 +82,64 @@ async def get_exploration_status(exploration_id: str):
         raise HTTPException(status_code=500, detail="Engine not initialized")
 
     try:
-        # Get exploration status
         exploration = _engine.orchestrator.explorations.get(exploration_id)
         if not exploration:
             raise HTTPException(status_code=404, detail="Exploration not found")
 
-        nodes = len(_engine.knowledge_graph.nodes)
-        edges = len(_engine.knowledge_graph.edges)
+        # Count nodes belonging to THIS exploration
+        exp_nodes = [
+            n for n in _engine.knowledge_graph.nodes.values()
+            if n.metadata.get("exploration_id") == exploration_id
+        ]
 
         return ConceptExpansionResponse(
             exploration_id=exploration_id,
             concept=exploration.concept,
             status=exploration.status.value if hasattr(exploration.status, 'value') else str(exploration.status),
-            nodes_count=nodes,
-            connections_count=edges,
+            nodes_count=len(exp_nodes),
+            connections_count=0,
         )
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error getting exploration status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/concepts/{exploration_id}/nodes")
+async def get_exploration_nodes(exploration_id: str):
+    """Get all nodes discovered during a specific exploration."""
+    if not _engine:
+        raise HTTPException(status_code=500, detail="Engine not initialized")
+
+    try:
+        exploration = _engine.orchestrator.explorations.get(exploration_id)
+        if not exploration:
+            raise HTTPException(status_code=404, detail="Exploration not found")
+
+        nodes = [
+            ConceptNodeResponse(
+                id=node.id,
+                concept=node.concept,
+                content=node.content,
+                metadata=node.metadata,
+                created_at=node.created_at,
+                connections=node.connections,
+            )
+            for node in _engine.knowledge_graph.nodes.values()
+            if node.metadata.get("exploration_id") == exploration_id
+        ]
+
+        return {
+            "exploration_id": exploration_id,
+            "concept": exploration.concept,
+            "nodes": nodes,
+            "total": len(nodes),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting exploration nodes: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

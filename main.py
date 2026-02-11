@@ -214,9 +214,15 @@ class EnhancedInfiniteConceptExpansionEngine:
 
             if response.success:
                 node_id = str(uuid.uuid4())
+                # Merge exploration_id into metadata so nodes can be
+                # filtered per-exploration later.
+                enriched_metadata = {
+                    **response.metadata,
+                    "exploration_id": exploration_id,
+                }
                 concept_node = self._create_concept_node(
                     node_id, task.concept, str(response.data),
-                    response.agent_name, response.metadata,
+                    response.agent_name, enriched_metadata,
                 )
                 self.knowledge_graph.add_node(concept_node)
 
