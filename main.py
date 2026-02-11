@@ -5,7 +5,7 @@ This module orchestrates the entire system, connecting all components to
 provide autonomous concept expansion capabilities with advanced visualization
 and persistent learning that improves over time.
 """
-from core.concept_orchestrator import DefaultConceptOrchestrator, ExplorationState
+from core.concept_orchestrator import DefaultConceptOrchestrator, ExplorationState, ExplorationTask
 from agents.base import AgentManager
 from knowledge_graph.engine import InMemoryKnowledgeGraphEngine
 from data_pipeline.ingestion import MockDataIngestionPipeline
@@ -203,7 +203,80 @@ class EnhancedInfiniteConceptExpansionEngine:
             }
         })
     
-    def _create_concept_node(self, node_id: str, concept: str, content: str, 
+    async def _run_cycle_with_task(self, exploration_id: str, task: ExplorationTask):
+        """Run a single expansion cycle with a given task (no shared queue)."""
+        print(f"⚙️  Processing task: {task.concept} (Type: {task.task_type})")
+
+        agent_responses = self.agent_manager.execute_task(task)
+
+        for response in agent_responses:
+            print(f"🤖 Agent {response.agent_name} completed with success: {response.success}")
+
+            if response.success:
+                node_id = str(uuid.uuid4())
+                concept_node = self._create_concept_node(
+                    node_id, task.concept, str(response.data),
+                    response.agent_name, response.metadata,
+                )
+                self.knowledge_graph.add_node(concept_node)
+
+                publish_event(exploration_id, {
+                    "type": "node_created",
+                    "data": {
+                        "node_id": node_id,
+                        "concept": task.concept,
+                        "source_agent": response.agent_name,
+                        "confidence": response.confidence,
+                        "timestamp": datetime.now().isoformat(),
+                    }
+                })
+
+                self.orchestrator.add_concept_node(concept_node)
+
+                self.persistent_learner.record_learning_event(
+                    event_type="node_created",
+                    data={
+                        "node_id": node_id,
+                        "concept": concept_node.concept,
+                        "source_agent": response.agent_name,
+                        "confidence": response.confidence,
+                        "timestamp": datetime.now().isoformat(),
+                    }
+                )
+
+        success_count = sum(1 for r in agent_responses if r.success)
+        avg_confidence = (
+            sum(r.confidence for r in agent_responses) / len(agent_responses)
+            if agent_responses else 0.0
+        )
+
+        self.feedback_system.record_system_feedback(
+            feedback_type="expansion_success",
+            item_id=task.id,
+            rating=min(1.0, avg_confidence),
+            metadata={
+                "exploration_id": exploration_id,
+                "task_type": task.task_type,
+                "agent_count": len(agent_responses),
+                "successful_agents": success_count,
+                "avg_confidence": avg_confidence,
+                "timestamp": datetime.now().isoformat(),
+            }
+        )
+
+        publish_event(exploration_id, {
+            "type": "expansion_cycle_complete",
+            "data": {
+                "exploration_id": exploration_id,
+                "successful_agents": success_count,
+                "total_agents": len(agent_responses),
+                "total_nodes": self.knowledge_graph.get_node_count(),
+                "total_edges": self.knowledge_graph.get_edge_count(),
+                "timestamp": datetime.now().isoformat(),
+            }
+        })
+
+    def _create_concept_node(self, node_id: str, concept: str, content: str,
                            source_agent: str, metadata: dict):
         """Create a concept node from agent response"""
         from core.concept_orchestrator import ConceptNode
@@ -234,7 +307,17 @@ class EnhancedInfiniteConceptExpansionEngine:
 
         for i in range(max_expansions):
             print(f"\n--- Expansion Cycle {i+1} ---")
-            await self.run_single_expansion_cycle(exploration_id)
+            # Create a dedicated task for this cycle so we don't depend
+            # on the shared orchestrator queue (which can be consumed by
+            # other concurrent explorations).
+            task = ExplorationTask(
+                id=str(uuid.uuid4()),
+                concept=concept,
+                task_type="expansion",
+                priority=10,
+                status=ExplorationState.PENDING,
+            )
+            await self._run_cycle_with_task(exploration_id, task)
             await asyncio.sleep(0.5)
 
         # Mark as completed
