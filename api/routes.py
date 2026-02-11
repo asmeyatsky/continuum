@@ -1,9 +1,12 @@
 """
 API routes for the Continuum application.
 """
+import asyncio
+import json
 import logging
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from datetime import datetime
 from api.models import (
     ConceptInputRequest,
@@ -56,6 +59,9 @@ async def submit_concept(request: ConceptInputRequest):
         # Get initial stats
         nodes = len(_engine.knowledge_graph.nodes)
         edges = len(_engine.knowledge_graph.edges)
+
+        # Run expansion in the background so the response returns immediately
+        asyncio.create_task(_engine.run_expansion_for_id(exploration_id))
 
         return ConceptExpansionResponse(
             exploration_id=exploration_id,
@@ -465,10 +471,90 @@ async def detect_contradictions():
         logger.error(f"Contradiction detection error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/explorations")
+async def list_explorations():
+    """List all explorations with their status."""
+    if not _engine:
+        raise HTTPException(status_code=500, detail="Engine not initialized")
+
+    try:
+        explorations = []
+        for exp_id, exp in _engine.orchestrator.explorations.items():
+            explorations.append({
+                "exploration_id": exp_id,
+                "concept": exp.concept,
+                "status": exp.status.value if hasattr(exp.status, "value") else str(exp.status),
+                "created_at": exp.created_at.isoformat() if exp.created_at else None,
+            })
+        return {
+            "explorations": explorations,
+            "total": len(explorations),
+        }
+    except Exception as e:
+        logger.error(f"Error listing explorations: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/events/{exploration_id}")
+async def exploration_events(exploration_id: str):
+    """
+    Server-Sent Events endpoint for real-time exploration updates.
+
+    Streams events as the exploration progresses: node_created,
+    expansion_cycle_complete, exploration_complete.
+    """
+    from main import subscribe_to_exploration, unsubscribe_from_exploration
+
+    queue = subscribe_to_exploration(exploration_id)
+
+    async def event_stream():
+        try:
+            # Send initial keepalive
+            yield f"data: {json.dumps({'type': 'connected', 'data': {'exploration_id': exploration_id}})}\n\n"
+
+            while True:
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=30.0)
+                    yield f"data: {json.dumps(event)}\n\n"
+                    if event.get("type") == "exploration_complete":
+                        break
+                except asyncio.TimeoutError:
+                    # Send keepalive to prevent connection timeout
+                    yield f"data: {json.dumps({'type': 'keepalive'})}\n\n"
+        finally:
+            unsubscribe_from_exploration(exploration_id, queue)
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 @router.get("/health")
 async def health_check():
-    """Health check endpoint."""
-    return {
+    """Health check endpoint with engine metrics."""
+    response = {
         "status": "healthy",
         "timestamp": datetime.utcnow().isoformat(),
     }
+
+    if _engine:
+        try:
+            response["engine"] = {
+                "total_nodes": len(_engine.knowledge_graph.nodes),
+                "total_edges": len(_engine.knowledge_graph.edges),
+                "active_explorations": sum(
+                    1 for e in _engine.orchestrator.explorations.values()
+                    if hasattr(e.status, "value") and e.status.value == "in_progress"
+                ),
+                "total_explorations": len(_engine.orchestrator.explorations),
+            }
+        except Exception:
+            pass
+
+    return response

@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
-import { FiSend, FiUpload, FiPlay, FiPause, FiSettings, FiGlobe, FiBook, FiClock, FiTarget } from 'react-icons/fi';
+import { FiSend, FiUpload, FiPlay, FiPause, FiSettings, FiGlobe, FiBook, FiClock, FiTarget, FiLoader } from 'react-icons/fi';
+import { useSubmitConcept } from '../utils/hooks';
 
 const ExplorerContainer = styled.div`
   max-width: 800px;
@@ -51,21 +53,7 @@ const TextArea = styled.textarea`
   min-height: 120px;
   font-size: 1rem;
   font-family: inherit;
-  
-  &:focus {
-    outline: none;
-    border-color: #667eea;
-    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-  }
-`;
 
-const Input = styled.input`
-  width: 100%;
-  padding: 12px;
-  border: 1px solid #e9ecef;
-  border-radius: 8px;
-  font-size: 1rem;
-  
   &:focus {
     outline: none;
     border-color: #667eea;
@@ -89,16 +77,16 @@ const CheckboxItem = styled.label`
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.2s ease;
-  
+
   input {
     margin: 0;
   }
-  
+
   &:hover {
     border-color: #667eea;
     background-color: #f8f9ff;
   }
-  
+
   ${props => props.checked && `
     border-color: #667eea;
     background-color: #f0f4ff;
@@ -122,24 +110,65 @@ const Button = styled.button`
   align-items: center;
   justify-content: center;
   gap: 8px;
-  
+
   ${props => props.variant === 'primary' ? `
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
     border: none;
-    
+
     &:hover {
       opacity: 0.9;
+    }
+
+    &:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
     }
   ` : `
     background: white;
     color: #6c757d;
     border: 1px solid #e9ecef;
-    
+
     &:hover {
       background: #f8f9fa;
     }
   `}
+`;
+
+const SliderContainer = styled.div`
+  margin: 15px 0;
+`;
+
+const SliderLabel = styled.div`
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+`;
+
+const Slider = styled.input`
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: #e9ecef;
+  outline: none;
+  -webkit-appearance: none;
+
+  &::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #667eea;
+    cursor: pointer;
+  }
+`;
+
+const ErrorBanner = styled.div`
+  background: #f8d7da;
+  color: #721c24;
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 20px;
 `;
 
 const ExplorationControls = styled.div`
@@ -166,39 +195,13 @@ const ControlGroup = styled.div`
   margin-bottom: 15px;
 `;
 
-const SliderContainer = styled.div`
-  margin: 15px 0;
-`;
-
-const SliderLabel = styled.div`
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 8px;
-`;
-
-const Slider = styled.input`
-  width: 100%;
-  height: 6px;
-  border-radius: 3px;
-  background: #e9ecef;
-  outline: none;
-  -webkit-appearance: none;
-  
-  &::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    background: #667eea;
-    cursor: pointer;
-  }
-`;
-
 const ConceptExplorer = () => {
   const [concept, setConcept] = useState('');
   const [depth, setDepth] = useState(5);
   const [focusAreas, setFocusAreas] = useState(['research', 'applications']);
   const [isPlaying, setIsPlaying] = useState(false);
+  const { submit, loading, error } = useSubmitConcept();
+  const navigate = useNavigate();
 
   const focusOptions = [
     { value: 'research', label: 'Research Papers', icon: <FiBook /> },
@@ -215,11 +218,18 @@ const ConceptExplorer = () => {
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log({ concept, depth, focusAreas });
-    // In a real app, this would call the API
-    alert(`Exploring: ${concept}\nDepth: ${depth}\nFocus: ${focusAreas.join(', ')}`);
+    if (!concept.trim() || loading) return;
+
+    try {
+      const result = await submit(concept.trim());
+      if (result?.exploration_id) {
+        navigate(`/explore/${result.exploration_id}`);
+      }
+    } catch (err) {
+      // Error is captured in the hook
+    }
   };
 
   return (
@@ -228,6 +238,12 @@ const ConceptExplorer = () => {
         <Title>Explore New Concepts</Title>
         <Subtitle>Describe the concept, idea, or diagram you want to explore</Subtitle>
       </Header>
+
+      {error && (
+        <ErrorBanner>
+          Failed to start exploration. Please check that the backend is running and try again.
+        </ErrorBanner>
+      )}
 
       <FormContainer>
         <form onSubmit={handleSubmit}>
@@ -239,6 +255,7 @@ const ConceptExplorer = () => {
               onChange={(e) => setConcept(e.target.value)}
               placeholder="Enter your concept here... e.g., 'sustainable agriculture', 'blockchain technology', or describe an image/diagram"
               required
+              disabled={loading}
             />
           </FormGroup>
 
@@ -264,7 +281,7 @@ const ConceptExplorer = () => {
             <Label>Focus Areas</Label>
             <CheckboxGroup>
               {focusOptions.map(option => (
-                <CheckboxItem 
+                <CheckboxItem
                   key={option.value}
                   checked={focusAreas.includes(option.value)}
                 >
@@ -281,8 +298,8 @@ const ConceptExplorer = () => {
           </FormGroup>
 
           <ButtonGroup>
-            <Button type="submit" variant="primary">
-              <FiSend /> Start Exploration
+            <Button type="submit" variant="primary" disabled={loading || !concept.trim()}>
+              {loading ? <><FiLoader /> Starting...</> : <><FiSend /> Start Exploration</>}
             </Button>
             <Button type="button" variant="secondary">
               <FiUpload /> Upload Diagram/Chart
@@ -294,8 +311,8 @@ const ConceptExplorer = () => {
       <ExplorationControls>
         <ControlsHeader><FiSettings /> Exploration Controls</ControlsHeader>
         <ControlGroup>
-          <Button 
-            onClick={() => setIsPlaying(!isPlaying)} 
+          <Button
+            onClick={() => setIsPlaying(!isPlaying)}
             variant={isPlaying ? 'secondary' : 'primary'}
           >
             {isPlaying ? <FiPause /> : <FiPlay />}

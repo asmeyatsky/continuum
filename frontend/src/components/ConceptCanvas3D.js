@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import styled from 'styled-components';
 import ForceGraph3D from 'react-force-graph-3d';
 import { FiMaximize2, FiMinimize2, FiRefreshCw, FiDownload } from 'react-icons/fi';
@@ -45,7 +45,7 @@ const ControlButton = styled.button`
   justify-content: center;
   cursor: pointer;
   color: #6c757d;
-  
+
   &:hover {
     background: #e9ecef;
     color: #495057;
@@ -66,11 +66,42 @@ const LoadingOverlay = styled.div`
   border-radius: 12px;
 `;
 
-const ConceptCanvas3D = () => {
+const GraphWrapper = styled.div`
+  width: 100%;
+  height: calc(100% - 50px);
+`;
+
+const ConceptCanvas3D = ({ refreshInterval }) => {
   const { data, loading, error, refetch } = useKnowledgeGraph(50);
   const [highlightNodes, setHighlightNodes] = useState(new Set());
   const [highlightLinks, setHighlightLinks] = useState(new Set());
+  const [dimensions, setDimensions] = useState({ width: 600, height: 400 });
   const fgRef = useRef();
+  const wrapperRef = useRef();
+
+  // Responsive sizing
+  const updateDimensions = useCallback(() => {
+    if (wrapperRef.current) {
+      const { clientWidth, clientHeight } = wrapperRef.current;
+      if (clientWidth > 0 && clientHeight > 0) {
+        setDimensions({ width: clientWidth, height: clientHeight });
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    updateDimensions();
+    const observer = new ResizeObserver(updateDimensions);
+    if (wrapperRef.current) observer.observe(wrapperRef.current);
+    return () => observer.disconnect();
+  }, [updateDimensions]);
+
+  // Auto-refresh when refreshInterval is set
+  useEffect(() => {
+    if (!refreshInterval) return;
+    const interval = setInterval(refetch, refreshInterval);
+    return () => clearInterval(interval);
+  }, [refreshInterval, refetch]);
 
   // Process API data to match ForceGraph format
   const graphData = {
@@ -87,14 +118,12 @@ const ConceptCanvas3D = () => {
     })) || []
   };
 
-  // Highlight nodes and links on hover
   const handleNodeHover = (node) => {
     highlightNodes.clear();
     highlightLinks.clear();
 
     if (node) {
       highlightNodes.add(node);
-      // Add neighbors
       graphData.links
         .filter(link => link.source === node || link.target === node)
         .forEach(link => {
@@ -148,24 +177,26 @@ const ConceptCanvas3D = () => {
           <ControlButton title="Download"><FiDownload /></ControlButton>
         </Controls>
       </CanvasHeader>
-      <ForceGraph3D
-        ref={fgRef}
-        graphData={graphData}
-        nodeLabel={node => `${node.name}`}
-        nodeAutoColorBy="group"
-        nodeVal={node => Math.sqrt(node.val || 1) * 5}
-        linkDirectionalArrowLength={6}
-        linkDirectionalArrowRelPos={1}
-        linkLabel={link => link.name}
-        backgroundColor="#f8f9fa"
-        width={600}
-        height={400}
-        onNodeHover={handleNodeHover}
-        linkColor={link => highlightLinks.has(link) ? '#667eea' : '#e9ecef'}
-        nodeColor={node => highlightNodes.has(node) ? '#667eea' : '#764ba2'}
-        nodeOpacity={0.9}
-        nodeResolution={16}
-      />
+      <GraphWrapper ref={wrapperRef}>
+        <ForceGraph3D
+          ref={fgRef}
+          graphData={graphData}
+          nodeLabel={node => `${node.name}`}
+          nodeAutoColorBy="group"
+          nodeVal={node => Math.sqrt(node.val || 1) * 5}
+          linkDirectionalArrowLength={6}
+          linkDirectionalArrowRelPos={1}
+          linkLabel={link => link.name}
+          backgroundColor="#f8f9fa"
+          width={dimensions.width}
+          height={dimensions.height}
+          onNodeHover={handleNodeHover}
+          linkColor={link => highlightLinks.has(link) ? '#667eea' : '#e9ecef'}
+          nodeColor={node => highlightNodes.has(node) ? '#667eea' : '#764ba2'}
+          nodeOpacity={0.9}
+          nodeResolution={16}
+        />
+      </GraphWrapper>
     </CanvasContainer>
   );
 };

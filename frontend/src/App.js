@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import styled from 'styled-components';
 import Dashboard from './containers/Dashboard';
 import ConceptExplorer from './containers/ConceptExplorer';
+import ExplorationResults from './containers/ExplorationResults';
 import Navigation from './components/Navigation';
 import GlobalStyle from './styles/GlobalStyle';
 
@@ -29,6 +30,7 @@ function App() {
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/explore" element={<ConceptExplorer />} />
+            <Route path="/explore/:explorationId" element={<ExplorationResults />} />
             <Route path="/dashboard" element={<Dashboard />} />
           </Routes>
         </MainContent>

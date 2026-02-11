@@ -96,17 +96,6 @@ def create_app(engine=None) -> FastAPI:
     @app.on_event("startup")
     async def startup_event():
         """Initialize the engine when the application starts."""
-        import logging
-        from core.concept_orchestrator import DefaultConceptOrchestrator
-        from knowledge_graph.engine import InMemoryKnowledgeGraphEngine
-        from feedback_system.core import SelfImprovingFeedbackSystem
-        from content_generation.multimodal import MockMultimodalContentGenerator
-        from data_pipeline.ingestion import MockDataIngestionPipeline
-        from llm_service.factory import get_llm_service
-        from database.database import get_db, engine as db_engine, Base
-        from knowledge_graph.persistent_engine import PersistentKnowledgeGraphEngine
-
-        logger = logging.getLogger(__name__)
         logger.info(f"Starting {settings.APP_NAME} v{settings.APP_VERSION}")
 
         # Initialize Prometheus metrics
@@ -118,48 +107,16 @@ def create_app(engine=None) -> FastAPI:
         
         if not engine:  # Only initialize if not provided
             try:
-                # Initialize the core components
-                llm_service = get_llm_service()
-                logger.info("LLM service initialized")
-                
-                ingestion_pipeline = MockDataIngestionPipeline()
-                logger.info("Data ingestion pipeline initialized")
-                
-                # Initialize Knowledge Graph Engine
-                # Check if we should use persistent storage
-                if settings.DATABASE_URL and "sqlite" not in settings.DATABASE_URL:
-                    # Ensure tables exist (for production, use Alembic, but this is a safety net)
-                    Base.metadata.create_all(bind=db_engine)
-                    
-                    # Create a session for the graph engine
-                    # Note: In a real app, we might want to manage sessions differently
-                    # or pass a session factory. For now, we create a dedicated session.
-                    from sqlalchemy.orm import sessionmaker
-                    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=db_engine)
-                    db_session = SessionLocal()
-                    
-                    knowledge_graph = PersistentKnowledgeGraphEngine(
-                        db_session=db_session,
-                        embedding_service=None # Can be added if needed
-                    )
-                    logger.info("Persistent Knowledge Graph Engine initialized")
-                else:
-                    knowledge_graph = InMemoryKnowledgeGraphEngine()
-                    logger.info("In-Memory Knowledge Graph Engine initialized")
-                
-                feedback_system = SelfImprovingFeedbackSystem()
-                logger.info("Feedback system initialized")
-                
-                content_generator = MockMultimodalContentGenerator()
-                logger.info("Content generator initialized")
-                
-                orchestrator = DefaultConceptOrchestrator()  # Using the concrete implementation
-                logger.info("Concept orchestrator initialized")
-                
-                # Set the engine for the routes
-                set_engine(orchestrator)
+                from main import EnhancedInfiniteConceptExpansionEngine
+
+                full_engine = EnhancedInfiniteConceptExpansionEngine()
+                logger.info("EnhancedInfiniteConceptExpansionEngine initialized")
+
+                # Set the full engine for the routes — it has
+                # .knowledge_graph, .feedback_system, .orchestrator, etc.
+                set_engine(full_engine)
                 logger.info("Engine set for API routes")
-                
+
             except Exception as e:
                 logger.error(f"Error initializing engine: {e}")
                 import traceback

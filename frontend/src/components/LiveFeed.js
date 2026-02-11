@@ -1,6 +1,6 @@
 import React from 'react';
 import styled from 'styled-components';
-import { FiActivity, FiImage, FiVideo, FiBook } from 'react-icons/fi';
+import { FiActivity, FiImage, FiBook } from 'react-icons/fi';
 
 const FeedContainer = styled.div`
   background: white;
@@ -24,7 +24,7 @@ const FeedItem = styled.div`
   border-bottom: 1px solid #f1f3f4;
   display: flex;
   gap: 12px;
-  
+
   &:last-child {
     border-bottom: none;
   }
@@ -71,66 +71,60 @@ const FeedTime = styled.div`
   color: #adb5bd;
 `;
 
-const LiveFeed = () => {
-  const feedItems = [
-    {
-      id: 1,
-      type: 'node',
-      title: 'New concept node created',
-      description: 'New concept node "Natural Language Processing" added to graph',
-      source: 'ConnectionAgent',
-      time: '2 mins ago'
-    },
-    {
-      id: 2,
-      type: 'content',
-      title: 'Content generated',
-      description: 'Generated multimedia content for "Computer Vision"',
-      source: 'MultimediaAgent',
-      time: '5 mins ago'
-    },
-    {
-      id: 3,
-      type: 'research',
-      title: 'Research completed',
-      description: 'Research on "Reinforcement Learning" completed with 5 sources',
-      source: 'ResearchAgent',
-      time: '8 mins ago'
-    },
-    {
-      id: 4,
-      type: 'node',
-      title: 'Connection discovered',
-      description: 'Discovered link between "Quantum Computing" and "Machine Learning"',
-      source: 'ConnectionAgent',
-      time: '12 mins ago'
-    }
-  ];
+const EmptyState = styled.div`
+  text-align: center;
+  padding: 20px;
+  color: #adb5bd;
+  font-size: 0.9rem;
+`;
 
-  const getIcon = (type) => {
-    switch (type) {
-      case 'node': return <FiActivity />;
-      case 'content': return <FiImage />;
-      case 'research': return <FiBook />;
-      default: return <FiActivity />;
-    }
-  };
+function formatRelativeTime(timestamp) {
+  if (!timestamp) return '';
+  const now = new Date();
+  const then = new Date(timestamp);
+  const diffMs = now - then;
+  const diffSec = Math.floor(diffMs / 1000);
+
+  if (diffSec < 60) return 'just now';
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin} min${diffMin > 1 ? 's' : ''} ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr} hr${diffHr > 1 ? 's' : ''} ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  return `${diffDay} day${diffDay > 1 ? 's' : ''} ago`;
+}
+
+const getIcon = (type) => {
+  switch (type) {
+    case 'node': return <FiActivity />;
+    case 'content': return <FiImage />;
+    case 'research': return <FiBook />;
+    default: return <FiActivity />;
+  }
+};
+
+const LiveFeed = ({ events }) => {
+  const items = events && events.length > 0 ? events : null;
 
   return (
     <FeedContainer>
       <FeedHeader><FiActivity /> Live Expansion Feed</FeedHeader>
-      {feedItems.map(item => (
-        <FeedItem key={item.id}>
-          <IconWrapper type={item.type}>
-            {getIcon(item.type)}
-          </IconWrapper>
-          <FeedContent>
-            <FeedTitle>{item.title}</FeedTitle>
-            <FeedDescription>{item.description}</FeedDescription>
-            <FeedTime>{item.time}</FeedTime>
-          </FeedContent>
-        </FeedItem>
-      ))}
+      {items ? (
+        items.map(item => (
+          <FeedItem key={item.id}>
+            <IconWrapper type={item.type || 'node'}>
+              {getIcon(item.type || 'node')}
+            </IconWrapper>
+            <FeedContent>
+              <FeedTitle>{item.title}</FeedTitle>
+              <FeedDescription>{item.description}</FeedDescription>
+              <FeedTime>{typeof item.time === 'string' && item.time.includes('ago') ? item.time : formatRelativeTime(item.time)}</FeedTime>
+            </FeedContent>
+          </FeedItem>
+        ))
+      ) : (
+        <EmptyState>No recent activity</EmptyState>
+      )}
     </FeedContainer>
   );
 };

@@ -1,12 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import styled from 'styled-components';
-import { FiActivity, FiGrid, FiZap, FiClock, FiUsers, FiTrendingUp } from 'react-icons/fi';
+import { FiActivity, FiGrid, FiZap, FiClock, FiTrendingUp } from 'react-icons/fi';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import MetricsCard from '../components/MetricsCard';
 import ConceptCanvas3D from '../components/ConceptCanvas3D';
 import LiveFeed from '../components/LiveFeed';
 import MediaGallery from '../components/MediaGallery';
 import OutputRenderer from '../components/OutputRenderer';
+import { conceptApi } from '../api';
 
 const DashboardContainer = styled.div`
   max-width: 1200px;
@@ -52,11 +53,12 @@ const SectionTitle = styled.h2`
 
 const Dashboard = () => {
   const [metrics, setMetrics] = useState({
-    active_explorations: 3,
-    total_nodes_in_knowledge_graph: 247,
-    uptime: "99.9%",
-    expansions_this_hour: 12
+    active_explorations: 0,
+    total_nodes: 0,
+    total_edges: 0,
+    total_explorations: 0,
   });
+  const [recentEvents, setRecentEvents] = useState([]);
 
   const [expansionData] = useState([
     { day: 'Mon', expansions: 45 },
@@ -68,6 +70,44 @@ const Dashboard = () => {
     { day: 'Sun', expansions: 41 }
   ]);
 
+  const fetchMetrics = useCallback(async () => {
+    try {
+      const [health, graph] = await Promise.all([
+        conceptApi.healthCheck(),
+        conceptApi.getKnowledgeGraph(100),
+      ]);
+
+      const engineData = health.engine || {};
+      setMetrics({
+        active_explorations: engineData.active_explorations || 0,
+        total_nodes: engineData.total_nodes || graph?.total_nodes || 0,
+        total_edges: engineData.total_edges || graph?.total_edges || 0,
+        total_explorations: engineData.total_explorations || 0,
+      });
+
+      // Build recent events from graph nodes for the live feed
+      if (graph?.nodes?.length) {
+        const events = graph.nodes.slice(0, 10).map((node, i) => ({
+          id: node.id,
+          type: 'node',
+          title: 'Concept node discovered',
+          description: `"${node.concept}" added to knowledge graph`,
+          source: node.metadata?.source_agent || 'System',
+          time: node.created_at,
+        }));
+        setRecentEvents(events);
+      }
+    } catch (err) {
+      // Backend may not be running yet — keep defaults
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchMetrics();
+    const interval = setInterval(fetchMetrics, 5000);
+    return () => clearInterval(interval);
+  }, [fetchMetrics]);
+
   return (
     <DashboardContainer>
       <Header>
@@ -75,32 +115,32 @@ const Dashboard = () => {
       </Header>
 
       <StatsGrid>
-        <MetricsCard 
+        <MetricsCard
           icon={<FiActivity />}
           title="Active Explorations"
           value={metrics.active_explorations}
-          change="+2 from yesterday"
+          change={`${metrics.total_explorations} total`}
           color="#667eea"
         />
-        <MetricsCard 
+        <MetricsCard
           icon={<FiGrid />}
           title="Knowledge Nodes"
-          value={metrics.total_nodes_in_knowledge_graph}
-          change="+15 this hour"
+          value={metrics.total_nodes}
+          change={`${metrics.total_edges} connections`}
           color="#764ba2"
         />
-        <MetricsCard 
+        <MetricsCard
           icon={<FiZap />}
-          title="Expansions/Hour"
-          value={metrics.expansions_this_hour}
-          change="+3 from last hour"
+          title="Connections"
+          value={metrics.total_edges}
+          change="edges in graph"
           color="#f093fb"
         />
-        <MetricsCard 
+        <MetricsCard
           icon={<FiClock />}
-          title="Uptime"
-          value={metrics.uptime}
-          change="Active for 30 days"
+          title="Explorations"
+          value={metrics.total_explorations}
+          change="total runs"
           color="#4facfe"
         />
       </StatsGrid>
@@ -134,11 +174,11 @@ const Dashboard = () => {
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '30px', marginBottom: '30px' }}>
         <ConceptCanvas3D />
         <div>
-          <LiveFeed />
+          <LiveFeed events={recentEvents} />
           <MediaGallery />
         </div>
       </div>
-      
+
       <OutputRenderer explorationId="dashboard-view" />
     </DashboardContainer>
   );

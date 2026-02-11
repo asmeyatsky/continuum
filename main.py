@@ -5,7 +5,7 @@ This module orchestrates the entire system, connecting all components to
 provide autonomous concept expansion capabilities with advanced visualization
 and persistent learning that improves over time.
 """
-from core.concept_orchestrator import DefaultConceptOrchestrator
+from core.concept_orchestrator import DefaultConceptOrchestrator, ExplorationState
 from agents.base import AgentManager
 from knowledge_graph.engine import InMemoryKnowledgeGraphEngine
 from data_pipeline.ingestion import MockDataIngestionPipeline
@@ -16,6 +16,37 @@ from utils.visualization import AdvancedKnowledgeGraphVisualizer, PersistentLear
 from datetime import datetime
 import asyncio
 import uuid
+from collections import defaultdict
+
+
+# Global event bus: exploration_id -> list of asyncio.Queue
+_event_subscribers: dict = defaultdict(list)
+
+
+def subscribe_to_exploration(exploration_id: str) -> asyncio.Queue:
+    """Subscribe to events for an exploration. Returns a Queue that receives events."""
+    queue = asyncio.Queue()
+    _event_subscribers[exploration_id].append(queue)
+    return queue
+
+
+def unsubscribe_from_exploration(exploration_id: str, queue: asyncio.Queue):
+    """Unsubscribe a queue from exploration events."""
+    if exploration_id in _event_subscribers:
+        _event_subscribers[exploration_id] = [
+            q for q in _event_subscribers[exploration_id] if q is not queue
+        ]
+        if not _event_subscribers[exploration_id]:
+            del _event_subscribers[exploration_id]
+
+
+def publish_event(exploration_id: str, event: dict):
+    """Publish an event to all subscribers of an exploration."""
+    for queue in _event_subscribers.get(exploration_id, []):
+        try:
+            queue.put_nowait(event)
+        except asyncio.QueueFull:
+            pass  # Drop event if queue is full
 
 
 class EnhancedInfiniteConceptExpansionEngine:
@@ -99,7 +130,19 @@ class EnhancedInfiniteConceptExpansionEngine:
                 
                 # Add to knowledge graph
                 self.knowledge_graph.add_node(concept_node)
-                
+
+                # Publish event to SSE subscribers
+                publish_event(exploration_id, {
+                    "type": "node_created",
+                    "data": {
+                        "node_id": node_id,
+                        "concept": task.concept,
+                        "source_agent": response.agent_name,
+                        "confidence": response.confidence,
+                        "timestamp": datetime.now().isoformat(),
+                    }
+                })
+
                 # Add edges to connect to parent concept if applicable
                 if hasattr(task, 'parent_node_id') and task.parent_node_id:
                     from knowledge_graph.engine import GraphEdge
@@ -146,6 +189,19 @@ class EnhancedInfiniteConceptExpansionEngine:
                 "timestamp": datetime.now().isoformat()
             }
         )
+
+        # Publish cycle complete event
+        publish_event(exploration_id, {
+            "type": "expansion_cycle_complete",
+            "data": {
+                "exploration_id": exploration_id,
+                "successful_agents": success_count,
+                "total_agents": len(agent_responses),
+                "total_nodes": self.knowledge_graph.get_node_count(),
+                "total_edges": self.knowledge_graph.get_edge_count(),
+                "timestamp": datetime.now().isoformat(),
+            }
+        })
     
     def _create_concept_node(self, node_id: str, concept: str, content: str, 
                            source_agent: str, metadata: dict):
@@ -167,10 +223,37 @@ class EnhancedInfiniteConceptExpansionEngine:
             connections=[]
         )
     
+    async def run_expansion_for_id(self, exploration_id: str, max_expansions: int = 5):
+        """Run expansion cycles for an already-submitted exploration ID."""
+        exploration = self.orchestrator.explorations.get(exploration_id)
+        if not exploration:
+            return
+
+        concept = exploration.concept
+        print(f"🔬 Running background expansion for: {concept} (ID: {exploration_id})")
+
+        for i in range(max_expansions):
+            print(f"\n--- Expansion Cycle {i+1} ---")
+            await self.run_single_expansion_cycle(exploration_id)
+            await asyncio.sleep(0.5)
+
+        # Mark as completed
+        exploration.status = ExplorationState.COMPLETED
+
+        publish_event(exploration_id, {
+            "type": "exploration_complete",
+            "data": {
+                "exploration_id": exploration_id,
+                "total_nodes": self.knowledge_graph.get_node_count(),
+                "total_edges": self.knowledge_graph.get_edge_count(),
+                "timestamp": datetime.now().isoformat(),
+            }
+        })
+
     async def expand_concept(self, concept: str, max_expansions: int = 5):
         """Run a complete expansion process for a concept"""
         print(f"🔬 Starting expansion for concept: {concept}")
-        
+
         # Submit the concept
         exploration_id = self.submit_concept(concept)
         
@@ -192,10 +275,26 @@ class EnhancedInfiniteConceptExpansionEngine:
         
         # Print detailed summary
         self._print_expansion_summary(exploration_id)
-        
+
         # Generate evolution insights
         self._generate_evolution_insights()
-        
+
+        # Mark exploration as completed
+        exploration = self.orchestrator.explorations.get(exploration_id)
+        if exploration:
+            exploration.status = ExplorationState.COMPLETED
+
+        # Publish exploration complete event
+        publish_event(exploration_id, {
+            "type": "exploration_complete",
+            "data": {
+                "exploration_id": exploration_id,
+                "total_nodes": self.knowledge_graph.get_node_count(),
+                "total_edges": self.knowledge_graph.get_edge_count(),
+                "timestamp": datetime.now().isoformat(),
+            }
+        })
+
         return exploration_id
     
     async def _generate_multimodal_content(self, exploration_id: str):

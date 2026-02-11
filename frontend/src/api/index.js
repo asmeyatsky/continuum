@@ -114,6 +114,17 @@ export const conceptApi = {
     }
   },
 
+  // Get all explorations
+  getExplorations: async () => {
+    try {
+      const response = await apiClient.get('/explorations');
+      return response.data;
+    } catch (error) {
+      console.error('Error getting explorations:', error);
+      throw error;
+    }
+  },
+
   // Health check
   healthCheck: async () => {
     try {
