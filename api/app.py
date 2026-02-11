@@ -158,11 +158,12 @@ def create_app(engine=None) -> FastAPI:
 if __name__ == "__main__":
     import uvicorn
 
-    # Create the app without engine (it will be set during startup)
     app = create_app()
+    # Passing an app object (not import string) requires workers=1,
+    # otherwise uvicorn skips startup events.
     uvicorn.run(
         app,
         host=settings.API_HOST,
         port=settings.API_PORT,
-        workers=settings.API_WORKERS,
+        workers=1,
     )
